@@ -1,0 +1,10 @@
+# 계약: Windows 전용 저장소다 — 작업 트리는 CRLF 로 둔다
+* text=auto
+
+# 함정: .bat 은 LF 로 체크아웃되면 cmd 가 마지막 인자를 잘못 읽는다
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.ico binary
+*.png binary

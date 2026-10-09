@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="GitCenter.App/GitCenter.App.csproj" />
+  <Project Path="GitCenter.Application/GitCenter.Application.csproj" />
+  <Project Path="GitCenter.Core/GitCenter.Core.csproj" />
+  <Project Path="GitCenter.Infrastructure/GitCenter.Infrastructure.csproj" />
+</Solution>

@@ -1,0 +1,54 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>GitCenter.App</RootNamespace>
+    <!-- 계약: 설치 파일(JHJ_Git-Center_&lt;버전&gt;_win-x64.exe)과 같은 이름이다 -->
+    <AssemblyName>JHJ_Git-Center</AssemblyName>
+
+    <Product>Git Center</Product>
+    <!-- 계약: 작업 관리자 「시작 앱」·속성 창의 파일 설명에 보이는 이름 -->
+    <AssemblyTitle>Git 통합 관리 센터</AssemblyTitle>
+    <Description>여러 git 저장소를 한 화면에서 보고 일괄로 받고 올린다</Description>
+    <Company>jhj</Company>
+    <Authors>jhj</Authors>
+    <Copyright>Copyright (c) 2026 HyungJin Ju</Copyright>
+    <RepositoryUrl>https://github.com/HyungJIn-kr-97/JHJ_GIT_CENTER</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <ApplicationIcon>Resources\app-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GitCenter.Application\GitCenter.Application.csproj" />
+    <ProjectReference Include="..\GitCenter.Infrastructure\GitCenter.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="H.NotifyIcon.Wpf" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="NHotkey.Wpf" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+    <PackageReference Include="Serilog.Sinks.Debug" />
+    <PackageReference Include="Serilog.Sinks.File" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 계약: exe 아이콘(ApplicationIcon)과 별개로 WPF 리소스로도 넣어야 트레이가 pack URI 로 읽는다 -->
+    <Resource Include="Resources\app-icon.ico" />
+  </ItemGroup>
+
+</Project>

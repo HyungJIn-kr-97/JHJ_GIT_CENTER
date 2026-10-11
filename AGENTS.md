@@ -32,7 +32,7 @@
 - 함정: 상세 읽기는 선택 바뀜과 상태 갱신이 겹쳐 두 번 돈다 — 세대 번호(`_detailGeneration`)로 늦게 온 쪽을 버린다.
 - 함정: `UseSerilog((context, services, logger) => …)` 는 로거를 **늦게** 만든다. `ILogger<T>` 를 아무도 주입받지 않으면
   끝내 안 만들어져 로그가 통째로 사라진다 — 이 앱은 2인자 overload 로 **코드에서 한 번만** 설정한다(`App.Configure`).
-- 계약: XAML 의 색은 전부 `DynamicResource`, 문구는 `{loc:Tr '한국어 원문'}` 이다. 새 문구는 `Localization/LocStrings.cs` 에 한 줄 더한다.
+- 계약: XAML 의 색은 전부 `DynamicResource`, 문구는 `{loc:Tr '한국어 원문'}` 이다. 새 문구는 `Localization/LocStrings.cs`(영어)와 `LocStringsZh.cs`(중국어)에 같은 키로 한 줄씩 더한다 — 언어는 영어(기본)·한국어·중국어 셋이다.
   ⚠️ `JHJ_AI_USAGE` 는 **영어가 키**다 — 이 앱은 방향이 반대다. 섞어 쓰지 않는다(`LocCatalog` 가 양쪽을 다 받는다).
   계약: 브러시 키·팔레트 정본은 Core 의 `Theme/JhjTheme.cs` 다. 저장소 상태 색(`BehindBrush`·`AheadBrush`)은
   `App.AddGitBrushes` 가 공통 뜻 색(`InfoBrush`·`WarnBrush`)에 이름만 붙인 것이다.
@@ -57,6 +57,9 @@
 - 계약: 창이 직접 그리는 설정(배율·작업 로그 단)은 `MainViewModel.NotifyDisplaySettingsChanged()` → `MainWindow.ApplyDisplaySettings()` 로 전해진다.
 - 계약: **Windows 제목 표시줄을 쓰지 않는다** — `WindowChrome`(CaptionHeight 0)으로 떼고 창 제어줄이 끌기·최대화·시스템 메뉴를 맡는다.
   `WindowStyle="None"` 으로 바꾸지 않는다 — 스냅·가장자리 크기 조절·그림자를 잃는다.
+  계약: 보통 창은 **지금 올라 있는 모니터의 작업 영역을 넘지 않는다** — Core `WindowFit.KeepInsideWorkArea` 가 크기·자리 변화마다 조인다(2026-10-11 사용자 지시 · 외부 `MoveWindow` 뒤 창이 1527px 로 튀어 아래 띠가 작업 표시줄 뒤로 숨던 것).
+  계약: 창의 최소 폭은 일괄 작업 띠 **윗줄이 한 줄로 들어가는 폭**이다(`MainWindow.OnActionTopRowSizeChanged` → `ApplyDisplaySettings`) — 띠가 3·4줄로 흐르지 않는다. 한국어 1625 · 영어 1739(배율 1).
+  함정: 아래 진행 줄(`BusyText` · 진행막대)은 `IsBusy` 일 때만 보인다 — 평소에 빈 줄이 여백을 먹었다.
   ⚠️ 창 단추 옆에 앱 단추를 두지 않는다 — 성격이 다른 둘이 한 줄에 섞이면 어색하다(2026-10-10 사용자 지적).
 - ★ 함정: `TabControl` 템플릿의 내용 자리는 반드시 **`x:Name="PART_SelectedContentHost"`** 다 —
   없으면 고른 탭의 내용이 **접근성 트리에 통째로 안 올라간다**(화면 낭독기도 UI 자동화도 못 읽는다. 2026-10-10 실측).
@@ -84,9 +87,15 @@
 - ★ 계약: 브랜치 설정은 둘이다 — 「작업 브랜치」(`Settings.WorkBranch`, 내가 일하는 곳)와 「업로드 브랜치」(`Settings.UploadBranch`, 코드가 모이는 곳).
   저장소별 값(`Settings.RepoBranches`)이 공통 값을 덮고, 일괄 작업이 저장소마다 풀어 쓴다(`BulkOperationOptions.WorkBranchFor`·`UploadBranchFor`).
   계약: 「병합」은 고른 브랜치(비면 업로드 브랜치)를 `fetch` 한 뒤 지금 브랜치로 합치고, 「올리기」는 업로드 브랜치로 `push <remote> HEAD:refs/heads/<업로드>` 한다 — force 없음 · upstream 안 바꿈.
+  계약: 지금 브랜치가 가져올 브랜치와 같으면 「병합」은 원격의 같은 브랜치(`<remote>/<브랜치>`)를 합친다 — 올리기가 거부된(갈라진) 저장소를 이 단추로 푼다. Pull 은 `--ff-only` 라 갈라지면 못 푼다.
+  계약: 실패를 푸는 단추가 정해진 결과는 `BulkStepResult.NextAction`(`BulkNextAction`)에 그 이름을 싣고, 화면은 같은 이름을 `Nudge.Key` 로 단 단추를 깜빡인다(`Controls/Nudge.cs` · `MainViewModel.NudgeAction`). 다음 일괄 작업을 시작하면 꺼진다.
+  함정: 접힌 단(Collapsed) 위의 덧그림은 WPF 가 지우지 않는다 — `Nudge` 가 단추의 `IsVisibleChanged` 를 따라 테를 함께 숨긴다(2026-10-11 「점검」 화면에 테가 남던 것).
+  셋이다 — `merge`(올리기 거부 → 「지금 브랜치로 병합」) · `conflict`(충돌 → 상세 「충돌」 탭, 그 탭을 열면 꺼진다) · `switch`(작업 브랜치가 아님 → 「전환」). 결과가 섞이면 충돌 → 실패 → 건너뜀 차례로 첫 것을 고른다.
   계약: 지금 브랜치가 작업 브랜치와 다르면 병합·커밋·올리기를 건너뛴다 — 단 작업 브랜치가 그 저장소에 없으면 막지 않는다(`GitService.NotOnWorkBranchAsync`).
   계약: 「전환」은 고른 저장소를 작업 브랜치로 `switch` 한다 — 로컬에 없으면 원격의 같은 이름을 추적해 만들고, 둘 다 없으면 건너뛴다. 강제 옵션은 없다.
-  함정: 원격에 없는 이름으로는 올리지 않는다 — 그대로 올리면 새 원격 브랜치가 조용히 생긴다(2026-10-11 실측).
+  함정: 업로드 브랜치가 지금 브랜치와 다를 때, 원격에 없는 이름으로는 올리지 않는다 — 그대로 올리면 새 원격 브랜치가 조용히 생긴다(2026-10-11 실측).
+  계약: 그 판정은 로컬이 아는 ref(`refs/remotes/<remote>/<업로드>`)로 한다 — 원격에 있어도 Fetch 전이면 건너뛴다. 업로드 브랜치가 비면 지금 브랜치를 그대로 올린다(원격에 없으면 새로 생긴다).
+  함정: 분리된 HEAD 는 `rev-parse --abbrev-ref HEAD` 가 `HEAD` 를 돌려준다 — `CurrentBranchAsync` 가 빈 값으로 바꿔 올리기를 건너뛴다(그대로 쓰면 `push HEAD:HEAD` 로 거부된다).
   계약: 브랜치·그룹은 **있는 것 중에서 고른다**(고르는 상자) — 손으로 적는 칸은 「새 그룹 이름」 하나뿐이다. 줄 하나의 값은 줄을 두 번 누르거나 톱니로 여는 쪽지가 고친다(`MainViewModel.Branches.cs`).
   함정: 이 앱의 `ComboBox` 틀은 고른 줄을 `ToString` 으로 그린다 — 줄 객체가 `ToString` 을 안 덮으면 레코드 모양이 보인다.
   계약: 저장소 줄을 끌어 그룹 머리·다른 그룹의 줄·거르개 단의 「그룹」 줄에 놓으면 옮겨진다(`Views/MainWindow.Repos.cs`).

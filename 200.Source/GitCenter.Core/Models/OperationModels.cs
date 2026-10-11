@@ -67,6 +67,22 @@ public sealed class BulkStepResult
     public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.Now;
 
     public List<string> ConflictPaths { get; init; } = [];
+
+    /// 계약: 실패를 푸는 다음 단추의 이름(BulkNextAction) — 화면이 그 단추를 깜빡여 가리킨다. 비면 가리킬 것이 없다
+    public string NextAction { get; set; } = string.Empty;
+}
+
+/// <summary>실패한 일괄 작업 뒤에 누를 단추의 이름 — 화면의 Nudge.Key 와 같은 글자다.</summary>
+public static class BulkNextAction
+{
+    /// 올리기가 거부됐다(원격이 앞섬) — 「지금 브랜치로 병합」으로 받아서 합친다
+    public const string Merge = "merge";
+
+    /// 병합·받기가 충돌로 멈췄다 — 상세의 「충돌」 탭에서 구간을 골라 푼다
+    public const string Conflict = "conflict";
+
+    /// 지금 브랜치가 작업 브랜치가 아니라 건너뛰었다 — 「전환」으로 작업 브랜치에 옮긴다
+    public const string Switch = "switch";
 }
 
 /// <summary>git 한 번 실행의 결과.</summary>

@@ -17,6 +17,9 @@ public partial class MainWindow : Window
 {
     private readonly Func<SettingsWindow> _settingsFactory;
 
+    // 계약: 일괄 작업 띠 윗줄이 한 줄로 들어가는 폭(배율 1 기준) — 창의 최소 폭이 이보다 작지 않다
+    private double _actionRowWidth;
+
     public MainWindow(MainViewModel viewModel, Func<SettingsWindow> settingsFactory)
     {
         InitializeComponent();
@@ -27,6 +30,7 @@ public partial class MainWindow : Window
         ApplyDisplaySettings();
         ApplyStartupSize();
         RestorePosition();
+        WindowFit.KeepInsideWorkArea(this);
 
         AppIcon.Bind(this);
         AppIcon.Bind(TitleIcon, TitleIcon.Width);
@@ -75,8 +79,22 @@ public partial class MainWindow : Window
         ActivityColumn.Width = showActivity ? new GridLength(28, GridUnitType.Star) : new GridLength(0);
 
         // 왜: 배율을 키우면 같은 창에 들어가는 내용이 줄어든다 — 최소 크기도 함께 키워야 3단이 안 뭉개진다
-        MinWidth = (showActivity ? 1180 : 880) * scale;
+        // 왜: 띠 윗줄이 둘째 줄로 흐르면 아래가 3·4줄이 된다 — 한 줄 폭을 최소 폭으로 삼는다(2026-10-11 사용자 지시)
+        MinWidth = Math.Max(showActivity ? 1180 : 880, _actionRowWidth) * scale;
         MinHeight = 680 * scale;
+    }
+
+    private void OnActionTopRowSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // 함정: WrapPanel 의 폭은 줄 바꿈 뒤의 폭이다 — 자식 폭의 합이 한 줄 폭이다. 띠 안팎 여백(12+12 · 12+12)과 테두리를 더한다
+        var row = ActionTopRow.Children.OfType<UIElement>().Sum(c => c.DesiredSize.Width) + 50;
+        if (Math.Abs(row - _actionRowWidth) < 0.5)
+        {
+            return;
+        }
+
+        _actionRowWidth = row;
+        ApplyDisplaySettings();
     }
 
     /// 계약: 복원 크기는 사용자 화면의 작업 영역에 맞추고, 처음에는 최대화로 연다 — 규격은 080.CS앱-화면-공통.md §3

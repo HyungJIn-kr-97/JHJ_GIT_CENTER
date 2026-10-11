@@ -280,6 +280,10 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _busyText = string.Empty;
 
+    /// 계약: 실패한 일괄 작업 뒤에 누를 단추의 이름(BulkNextAction)이다 — 그 이름을 Nudge.Key 로 단 단추가 깜빡인다. 비면 아무것도 안 깜빡인다
+    [ObservableProperty]
+    private string _nudgeAction = string.Empty;
+
     [ObservableProperty]
     private int _progressDone;
 
@@ -304,6 +308,15 @@ public sealed partial class MainViewModel : ObservableObject
     // 계약: 0 변경 파일 · 1 브랜치 · 2 충돌 — 충돌이 있으면 그 탭을 먼저 연다
     [ObservableProperty]
     private int _detailTabIndex;
+
+    // 왜: 「충돌」 탭을 열었으면 가리킬 일이 끝났다 — 탭이 열린 뒤에도 깜빡이면 무엇을 더 하라는지 모른다
+    partial void OnDetailTabIndexChanged(int value)
+    {
+        if (value == 2 && NudgeAction == BulkNextAction.Conflict)
+        {
+            NudgeAction = string.Empty;
+        }
+    }
 
     // ── 변경 내용(diff) ──────────────────────────────────────
     // 계약: 0 변경 내용 · 1 작업 로그 — 변경 파일을 누르면 0 으로 옮긴다
@@ -1052,6 +1065,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _work = new CancellationTokenSource();
         IsBusy = true;
+        NudgeAction = string.Empty;
         var mergeSource = kind is BulkOperationKind.MergeDefaultIntoCurrent ? MergeSource?.Trim() ?? string.Empty : string.Empty;
         BusyText = mergeSource.Length > 0
             ? $"{Describe(kind)}({mergeSource}) — 저장소 {targets.Count}개"
@@ -1104,6 +1118,13 @@ public sealed partial class MainViewModel : ObservableObject
             var ok = results.Count(r => r.Outcome == StepOutcome.Success);
             var conflict = results.Count(r => r.Outcome == StepOutcome.Conflict);
             var failed = results.Count(r => r.Outcome == StepOutcome.Failed);
+
+            // 계약: 실패를 푸는 단추가 정해져 있으면 그 단추를 깜빡여 가리킨다 — 다음 일괄 작업을 시작하면 꺼진다
+            // 왜: 결과가 섞이면 급한 것부터다 — 충돌 → 실패 → 건너뜀 차례로 첫 단추를 고른다
+            NudgeAction = results
+                .OrderBy(r => r.Outcome switch { StepOutcome.Conflict => 0, StepOutcome.Failed => 1, _ => 2 })
+                .Select(r => r.NextAction)
+                .FirstOrDefault(a => a.Length > 0) ?? string.Empty;
 
             AddActivity(Describe(kind),
                 failed > 0 ? StepOutcome.Failed : conflict > 0 ? StepOutcome.Conflict : StepOutcome.Success,

@@ -187,11 +187,11 @@ public partial class App : System.Windows.Application
         Log.Information("업데이트 확인: {Result}", result);
     }
 
-    // 계약: 묻고 알리는 것은 앱 몫이다 — Core 의 SelfInstaller 는 WPF 를 모른다
-    private static bool ConfirmInstall(string installDir) =>
+    // 계약: 묻고 알리는 것은 앱 몫이다 — Core 의 SelfInstaller 는 WPF 를 모른다. 본문(설치본 버전 → 이번 버전)은 Core 의 InstallPromptText 다
+    private static bool ConfirmInstall(InstallPrompt prompt) =>
         Environment.GetCommandLineArgs().Contains(AppUpdate.SilentInstallArg, StringComparer.OrdinalIgnoreCase) ||
         System.Windows.MessageBox.Show(
-            $"{Loc.T("이 PC 에 설치하고 실행할까요?")}\n\n{installDir}\n\n{Loc.T("「아니요」를 고르면 설치하지 않고 이 자리에서 실행합니다.")}",
+            InstallPromptText.Describe(prompt),
             "JHJ Git Center",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question) == MessageBoxResult.Yes;

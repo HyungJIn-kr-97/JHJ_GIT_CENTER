@@ -179,8 +179,8 @@ public sealed class AppSettings
     /// "bull" | "navy" | "emerald" | "violet" | "slate"
     public string Palette { get; set; } = "violet";
 
-    /// "ko" | "en"
-    public string Language { get; set; } = "ko";
+    /// 계약: "en" | "ko" | "zh" — 기본값은 Core 의 Loc.Default 와 같은 글자다(이 층은 Jhj.Core.Wpf 를 못 문다)
+    public string Language { get; set; } = "en";
 
     /// 계약: 창 전체의 글자·여백 배율 — 0.9 · 1.0 · 1.1 · 1.25 중 하나. 적용하면 바로 반영된다
     public double UiScale { get; set; } = 1.0;

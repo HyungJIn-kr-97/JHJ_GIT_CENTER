@@ -3,7 +3,7 @@ using Jhj.Core.Wpf.Localization;
 namespace GitCenter.App.Localization;
 
 /// <summary>
-/// 한국어 원문 → 영어. 화면에 새 문구를 넣으면 여기에 한 줄 더한다.
+/// 한국어 원문 → 영어. 중국어는 LocStringsZh 가 같은 키로 갖는다 — 화면에 새 문구를 넣으면 두 표에 한 줄씩 더한다.
 /// 계약: 없는 키는 한국어가 그대로 나간다 — 빠뜨려도 화면이 깨지지는 않는다.
 /// 계약: 이 앱은 **한국어가 키**다(JHJ_AI_USAGE 는 영어가 키다) — 한 앱 안에서 방향을 섞지 않는다.
 /// 계약: App 시작 때 Loc.Register(LocStrings.Catalog) 를 한 번 부른다.
@@ -228,11 +228,92 @@ internal static class LocStrings
         ["닫기"] = "Close",
         ["적용"] = "Apply",
         ["기본값으로"] = "Reset",
-        ["이 PC 에 설치하고 실행할까요?"] = "Install to this PC and run?",
-        ["「아니요」를 고르면 설치하지 않고 이 자리에서 실행합니다."] = "Choosing No runs it from here without installing.",
-        ["선택 %d개"] = "%d selected"
+        ["선택 %d개"] = "%d selected",
+
+        // 트레이 · 아이콘 고르개 · 풍선 도움말
+        ["창 열기"] = "Open window",
+        ["기본 (JHJ)"] = "Default (JHJ)",
+        ["불러온 그림"] = "Imported image",
+        ["왼쪽 조건 거르개 단을 접고 폅니다"] = "Collapses or expands the filter pane on the left",
+        ["고른 저장소를 내가 작업 중인 저장소로 찍습니다 — 모두 찍혀 있으면 풉니다"] = "Marks the selected repositories as the ones you are working on — clears the mark if all are already marked",
+        ["구간을 전부 고른 파일만 다시 쓰고 스테이지합니다 — 이전 파일은 백업됩니다"] = "Rewrites and stages only the files with every hunk decided — the previous files are backed up",
+        ["이 파일을 고른 대로 다시 쓰고 스테이지합니다"] = "Rewrites this file as chosen and stages it",
+        ["내 것 다음에 상대 것을 이어 붙입니다"] = "Keeps ours, then appends theirs",
+        ["양쪽이 서로 다른 줄을 고쳐 줄 단위로 합친 결과입니다"] = "Both sides changed different lines — merged line by line",
+        ["충돌이 다 풀린 병합을 커밋으로 맺습니다"] = "Commits the merge once every conflict is resolved",
+
+        // 도움말 걸음 — 제목 (Views/MainWindow.Tour.cs)
+        ["화면 탭"] = "Screen tabs",
+        ["통계 카드"] = "Stat cards",
+        ["커밋 캘린더와 저장소 카드"] = "Commit calendar and repository cards",
+        ["확인 필요 · 최근 커밋 · 최근 작업"] = "Needs attention · Recent commits · Recent activity",
+        ["현황과 검색"] = "Status and search",
+        ["저장소 목록"] = "Repository list",
+        ["저장소 상세"] = "Repository details",
+        ["변경 내용 · 작업 로그"] = "Changes · Activity",
+        ["일괄 작업"] = "Bulk actions",
+        ["일괄 적용"] = "Bulk apply",
+
+        // 도움말 걸음 — 본문
+        ["화면은 넷입니다. 「대시보드」는 전체 현황, 「저장소 관리」는 받기·커밋·올리기, 「커밋 내역」은 고른 기간·저장소의 커밋, 「점검」은 설정 점검과 일괄 적용입니다. 도움말은 지금 보고 있는 화면을 짚습니다."] =
+            "There are four screens. \"Dashboard\" is the overview, \"Repositories\" is for fetching, committing and pushing, \"Commits\" lists the commits of a chosen period or repository, and \"Audit\" checks settings and applies them in bulk. Help walks through the screen you are looking at.",
+        ["저장소 전체를 한눈에 봅니다. 위쪽 숫자 칸과 카드의 줄은 건너가는 길입니다 — 누르면 그 조건이 걸린 「저장소 관리」로 옮깁니다."] =
+            "See every repository at a glance. The number tiles at the top and the rows inside the cards are shortcuts — click one to open \"Repositories\" with that condition applied.",
+        ["카드 머리의 고르개로 표시 방식(도넛·막대·표 등)을 바꿉니다. 고르는 즉시 저장됩니다."] =
+            "The picker in each card header changes how it is drawn (donut, bars, table and so on). The choice is saved immediately.",
+        ["캘린더는 기간(30일~2년)과 보기 형식을 따로 고릅니다. 칸·막대를 누르면 그 날의 커밋이, 「변경 많은 저장소」·「변경 줄 수」·「마지막 커밋 시점」의 줄을 누르면 그 저장소의 커밋이 「커밋 내역」에 열립니다."] =
+            "The calendar picks its period (30 days to 2 years) and its view separately. Click a cell or bar to open that day's commits, or a row in the most-changed, changed-lines or last-commit cards to open that repository's commits in \"Commits\".",
+        ["「확인 필요 저장소」는 저장소 관리로, 「최근 커밋」은 그 저장소의 커밋 내역으로 건너갑니다. 카드 크기는 위쪽 「UI 편집」을 켠 동안에만 끌어서 바꿉니다."] =
+            "\"Needs attention\" jumps to Repositories and \"Recent commits\" opens that repository's commits. Card sizes can be dragged only while \"Edit layout\" at the top is on.",
+        ["왼쪽 칩은 변경 · 받을 것 · 올릴 것 · 충돌이 있는 저장소 수입니다. 누르면 그 상태만 남깁니다. 오른쪽에서 이름·경로를 찾고, 상태와 목록을 새로 읽고, 설정을 엽니다."] =
+            "The chips on the left count repositories with changes, incoming, outgoing and conflicts. Click one to keep only that state. On the right you search by name or path, refresh status and the list, and open Settings.",
+        ["그룹 · 상태 · 작업 · 브랜치를 조건마다 하나씩 골라 겹쳐 겁니다. 걸린 줄이나 「전체」를 다시 누르면 풉니다. 목록 머리의 「필터」로 이 단을 접습니다."] =
+            "Pick one value each for group, state, working and branch — the conditions stack. Click the active row or \"All\" again to clear it. \"Filter\" in the list header collapses this pane.",
+        ["체크한 저장소가 일괄 작업의 대상입니다 — 필터에 가려진 저장소는 체크돼 있어도 건드리지 않습니다. 줄을 누르면 오른쪽에 상세가 열리고, 「작업 중 표시」로 지금 손대는 저장소에 표를 붙입니다."] =
+            "Checked repositories are the targets of bulk actions — repositories hidden by the filter are left alone even when checked. Click a row to open its details on the right, and use \"Mark as working\" to tag the repositories you are working on.",
+        ["「변경 파일」은 파일별 추가·삭제 줄 수를 보여 주고, 확장자가 여럿이면 위쪽 칩으로 좁힙니다. 파일을 누르면 오른쪽 단에 차이가 펴집니다. 「브랜치」·「충돌」 탭도 여기 있습니다."] =
+            "\"Changed files\" shows added and removed lines per file; with several extensions, the chips above narrow the list. Click a file to open its diff in the right pane. The \"Branches\" and \"Conflicts\" tabs are here too.",
+        ["접혀 있는 오른쪽 단입니다. 눌러 펴면 고른 파일의 차이와, 일괄 작업이 저장소마다 남긴 결과를 봅니다."] =
+            "The collapsed pane on the right. Open it to see the diff of the chosen file and the result each bulk action left per repository.",
+        ["브랜치 고르기 · 받기 · 병합 · 올리기가 줄마다 모여 있고, 체크한 저장소에만 돕니다. 커밋 제목·메시지에는 자리표 {기능}·{그룹}·{저장소} 를 쓸 수 있고 누를 때 채워집니다. 강제 올리기는 없습니다 — 거부되면 먼저 받아서 합칩니다."] =
+            "Branch picking, fetching, merging and pushing sit on their own rows and run only on checked repositories. The commit subject and message accept the placeholders {기능}, {그룹} and {저장소}, filled in when you click. There is no force push — if a push is rejected, fetch and merge first.",
+        ["대시보드에서 캘린더의 칸·막대나 저장소 줄을 누르면 채워집니다. 지금 브랜치의 커밋만 읽습니다. 줄마다 「웹에서 보기」는 원격 사이트의 그 커밋을, 「저장소 보기」는 저장소 관리의 그 저장소를 엽니다."] =
+            "Filled when you click a calendar cell or bar, or a repository row, on the dashboard. Only commits on the current branch are read. In each row, \"Open on web\" opens that commit on the remote site and \"Show repository\" opens it in Repositories.",
+        ["「점검 실행」은 전체 저장소의 작성자 · 원격 · 무시 목록 · 줄바꿈 설정을 읽어 다수와 다른 것을 표시합니다. 표는 읽기만 합니다."] =
+            "\"Run audit\" reads the author, remote, ignore list and line-ending settings of every repository and flags what differs from the majority. The table is read-only.",
+        ["「작성자 일괄 적용」과 「공통 무시 목록」은 저장소 관리에서 체크한 저장소에만 씁니다. 먼저 「미리 보기」로 바뀔 저장소를 확인해야 「적용」이 나오고, 바꾼 내용은 작업 로그에 남습니다."] =
+            "\"Apply author\" and \"Common excludes\" write only to repositories checked in Repositories. \"Apply\" appears only after \"Preview\" has shown which repositories will change, and every change is kept in Activity.",
+
+        // 「점검」 화면 안내 문구 (ViewModels/MainViewModel.Audit.cs · .Exclude.cs · .History.cs) — {n} 은 Loc.T(format, args) 자리
+        ["읽는 중입니다…"] = "Reading…",
+        ["(없음)"] = "(none)",
+        ["고른 저장소가 없습니다 — 저장소 관리에서 먼저 고르십시오."] = "No repositories selected — pick them in Repositories first.",
+        ["「점검 실행」을 누르면 전체 저장소의 작성자 · 원격 · 추적 브랜치 · 무시 목록 · 줄바꿈 설정을 읽습니다. 아무것도 고치지 않습니다."] =
+            "\"Run audit\" reads the author, remote, tracking branch, ignore list and line-ending settings of every repository. Nothing is changed.",
+        ["저장소 {0}개 · 확인할 것이 있는 저장소 {1}개 · 기준 작성자 {2} · 기준 autocrlf {3}"] = "{0} repositories · {1} need attention · reference author {2} · reference autocrlf {3}",
+        ["저장소 관리에서 고른 저장소에만 적용합니다. 먼저 「미리 보기」로 바뀔 것을 확인하십시오."] = "Applies only to repositories selected in Repositories. Click \"Preview\" first to see what will change.",
+        ["이름과 메일을 모두 적어 주십시오."] = "Enter both the name and the email.",
+        ["고른 저장소 {0}개가 이미 같은 작성자입니다 — 쓸 것이 없습니다."] = "All {0} selected repositories already have this author — nothing to write.",
+        ["고른 저장소 {0}개 중 {1}개가 바뀝니다. 맞으면 「적용」을 누르십시오."] = "{1} of the {0} selected repositories will change. Click \"Apply\" if this looks right.",
+        ["먼저 「미리 보기」를 눌러 바뀔 것을 확인하십시오."] = "Click \"Preview\" first to see what will change.",
+        ["적용 {0}개 · 실패 {1}개 — 바꾸기 전 값은 작업 로그에 있습니다."] = "Applied {0} · failed {1} — the previous values are in Activity.",
+        ["한 줄에 하나씩 적습니다. 고른 저장소의 .git/info/exclude 에 없는 줄만 덧붙입니다 — 커밋되지 않고, 이미 추적 중인 파일에는 효과가 없습니다."] =
+            "One rule per line. Only lines missing from the selected repositories' .git/info/exclude are appended — nothing is committed, and files already tracked are unaffected.",
+        ["고른 저장소의 .gitignore 에 없는 줄만 덧붙입니다(없으면 만듭니다) — 저장소마다 미커밋 변경이 하나 생기고, 커밋은 직접 하셔야 합니다."] =
+            "Only lines missing from the selected repositories' .gitignore are appended (the file is created if absent) — each repository gets one uncommitted change, which you commit yourself.",
+        ["고른 저장소의 .git/info/exclude 에 없는 줄만 덧붙입니다 — 커밋되지 않고, 이미 추적 중인 파일에는 효과가 없습니다."] =
+            "Only lines missing from the selected repositories' .git/info/exclude are appended — nothing is committed, and files already tracked are unaffected.",
+        ["덧붙일 줄을 적어 주십시오."] = "Enter the lines to append.",
+        ["「{0}」 는 새 파일을 통째로 가립니다 — 일괄로 넣지 않습니다."] = "\"{0}\" hides every new file — it is not added in bulk.",
+        ["고른 저장소 {0}개에 이미 다 들어 있습니다 — 쓸 것이 없습니다."] = "All {0} selected repositories already have these lines — nothing to write.",
+        ["고른 저장소 {0}개 중 {1}개의 {2} 에 줄이 더해집니다. 맞으면 「적용」을 누르십시오."] = "Lines will be added to {2} in {1} of the {0} selected repositories. Click \"Apply\" if this looks right.",
+        ["먼저 「미리 보기」를 눌러 더해질 줄을 확인하십시오."] = "Click \"Preview\" first to see which lines will be added.",
+        ["적용 {0}개 · 실패 {1}개 — 더한 줄은 작업 로그에 있습니다. 「상태 새로 고침」을 하면 목록에 비칩니다."] = "Applied {0} · failed {1} — the added lines are in Activity. \"Refresh status\" shows them in the list.",
+        ["대시보드의 커밋 캘린더(칸·막대)나 저장소 줄을 누르면 그 커밋이 여기에 나옵니다."] = "Click a cell or bar in the dashboard's commit calendar, or a repository row, to list those commits here.",
+        ["커밋 내역 — {0}"] = "Commits — {0}",
+        ["커밋 {0:N0}건 · 저장소 {1}개 · 지금 브랜치 기준"] = "{0:N0} commits · {1} repositories · current branch only"
     };
 
     // 함정: English 보다 **뒤**에 둔다 — 앞에 두면 정적 초기화 순서 때문에 빈 사전이 넘어간다
-    public static LocCatalog Catalog { get; } = LocCatalog.Of(Loc.Korean, Loc.English, English);
+    public static LocCatalog Catalog { get; } = LocCatalog.Of(Loc.Korean, (Loc.English, English), (Loc.Chinese, LocStringsZh.Table));
 }

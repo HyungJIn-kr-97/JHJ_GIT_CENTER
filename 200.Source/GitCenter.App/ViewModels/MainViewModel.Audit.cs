@@ -45,7 +45,7 @@ public sealed partial class MainViewModel
     public ObservableCollection<AuditRow> AuditRows { get; } = [];
 
     [ObservableProperty]
-    private string _auditCaption = "「점검 실행」을 누르면 전체 저장소의 작성자 · 원격 · 추적 브랜치 · 무시 목록 · 줄바꿈 설정을 읽습니다. 아무것도 고치지 않습니다.";
+    private string _auditCaption = Loc.T("「점검 실행」을 누르면 전체 저장소의 작성자 · 원격 · 추적 브랜치 · 무시 목록 · 줄바꿈 설정을 읽습니다. 아무것도 고치지 않습니다.");
 
     [ObservableProperty]
     private bool _isAuditing;
@@ -59,7 +59,7 @@ public sealed partial class MainViewModel
         }
 
         IsAuditing = true;
-        AuditCaption = "읽는 중입니다…";
+        AuditCaption = Loc.T("읽는 중입니다…");
         AuditRows.Clear();
 
         try
@@ -86,7 +86,8 @@ public sealed partial class MainViewModel
                 AuditRows.Add(row);
             }
 
-            AuditCaption = $"저장소 {rows.Count}개 · 확인할 것이 있는 저장소 {rows.Count(r => r.HasFindings)}개 · 기준 작성자 {email} · 기준 autocrlf {(autoCrlf.Length == 0 ? "(없음)" : autoCrlf)}";
+            AuditCaption = Loc.T("저장소 {0}개 · 확인할 것이 있는 저장소 {1}개 · 기준 작성자 {2} · 기준 autocrlf {3}",
+                rows.Count, rows.Count(r => r.HasFindings), email, autoCrlf.Length == 0 ? Loc.T("(없음)") : autoCrlf);
         }
         finally
         {
@@ -110,7 +111,7 @@ public sealed partial class MainViewModel
     private string _authorEmail = string.Empty;
 
     [ObservableProperty]
-    private string _authorCaption = "저장소 관리에서 고른 저장소에만 적용합니다. 먼저 「미리 보기」로 바뀔 것을 확인하십시오.";
+    private string _authorCaption = Loc.T("저장소 관리에서 고른 저장소에만 적용합니다. 먼저 「미리 보기」로 바뀔 것을 확인하십시오.");
 
     // 왜: 미리 본 뒤 값을 고치면 목록이 옛 값 기준이다 — 고치는 순간 비워 다시 보게 한다
     partial void OnAuthorNameChanged(string value) => AuthorPreview.Clear();
@@ -126,14 +127,14 @@ public sealed partial class MainViewModel
 
         if (name.Length == 0 || !email.Contains('@'))
         {
-            AuthorCaption = "이름과 메일을 모두 적어 주십시오.";
+            AuthorCaption = Loc.T("이름과 메일을 모두 적어 주십시오.");
             return;
         }
 
         var targets = SelectedShown().Where(r => r.Entry.Health == RepoHealth.Ok).ToList();
         if (targets.Count == 0)
         {
-            AuthorCaption = "고른 저장소가 없습니다 — 저장소 관리에서 먼저 고르십시오.";
+            AuthorCaption = Loc.T("고른 저장소가 없습니다 — 저장소 관리에서 먼저 고르십시오.");
             return;
         }
 
@@ -142,14 +143,14 @@ public sealed partial class MainViewModel
             var audit = await _git.ReadAuditAsync(repo.Entry, CancellationToken.None).ConfigureAwait(true);
             if (audit.UserName != name || !string.Equals(audit.UserEmail, email, StringComparison.OrdinalIgnoreCase))
             {
-                var before = audit.UserName.Length + audit.UserEmail.Length == 0 ? "(없음)" : $"{audit.UserName} <{audit.UserEmail}>";
+                var before = audit.UserName.Length + audit.UserEmail.Length == 0 ? Loc.T("(없음)") : $"{audit.UserName} <{audit.UserEmail}>";
                 AuthorPreview.Add(new AuthorChange(repo, before, $"{name} <{email}>"));
             }
         }
 
         AuthorCaption = AuthorPreview.Count == 0
-            ? $"고른 저장소 {targets.Count}개가 이미 같은 작성자입니다 — 쓸 것이 없습니다."
-            : $"고른 저장소 {targets.Count}개 중 {AuthorPreview.Count}개가 바뀝니다. 맞으면 「적용」을 누르십시오.";
+            ? Loc.T("고른 저장소 {0}개가 이미 같은 작성자입니다 — 쓸 것이 없습니다.", targets.Count)
+            : Loc.T("고른 저장소 {0}개 중 {1}개가 바뀝니다. 맞으면 「적용」을 누르십시오.", targets.Count, AuthorPreview.Count);
     }
 
     [RelayCommand]
@@ -158,7 +159,7 @@ public sealed partial class MainViewModel
         var changes = AuthorPreview.ToList();
         if (changes.Count == 0)
         {
-            AuthorCaption = "먼저 「미리 보기」를 눌러 바뀔 것을 확인하십시오.";
+            AuthorCaption = Loc.T("먼저 「미리 보기」를 눌러 바뀔 것을 확인하십시오.");
             return;
         }
 
@@ -176,7 +177,7 @@ public sealed partial class MainViewModel
         }
 
         AuthorPreview.Clear();
-        AuthorCaption = $"적용 {changes.Count - failed}개 · 실패 {failed}개 — 바꾸기 전 값은 작업 로그에 있습니다.";
+        AuthorCaption = Loc.T("적용 {0}개 · 실패 {1}개 — 바꾸기 전 값은 작업 로그에 있습니다.", changes.Count - failed, failed);
         await RunAuditAsync().ConfigureAwait(true);
     }
 

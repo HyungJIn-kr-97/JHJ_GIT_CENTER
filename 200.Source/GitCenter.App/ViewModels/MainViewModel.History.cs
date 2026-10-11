@@ -43,7 +43,7 @@ public sealed partial class MainViewModel
     private string _historyTitle = "커밋 내역";
 
     [ObservableProperty]
-    private string _historyCaption = "대시보드의 커밋 캘린더(칸·막대)나 저장소 줄을 누르면 그 커밋이 여기에 나옵니다.";
+    private string _historyCaption = Loc.T("대시보드의 커밋 캘린더(칸·막대)나 저장소 줄을 누르면 그 커밋이 여기에 나옵니다.");
 
     // 함정: 칸을 잇달아 누르면 읽기가 겹친다 — 세대 번호로 늦게 온 쪽을 버린다
     private int _historyGeneration;
@@ -106,8 +106,8 @@ public sealed partial class MainViewModel
     private async Task LoadHistoryAsync(string span, IReadOnlyList<RepoRow> repos, DateOnly from, DateOnly to)
     {
         var generation = ++_historyGeneration;
-        HistoryTitle = $"커밋 내역 — {span}";
-        HistoryCaption = "읽는 중입니다…";
+        HistoryTitle = Loc.T("커밋 내역 — {0}", span);
+        HistoryCaption = Loc.T("읽는 중입니다…");
         HistoryCommits.Clear();
         PageIndex = 2;
 
@@ -128,7 +128,7 @@ public sealed partial class MainViewModel
             HistoryCommits.Add(commit);
         }
 
-        HistoryCaption = $"커밋 {found.Count:N0}건 · 저장소 {found.Select(c => c.Repo).Distinct().Count()}개 · 지금 브랜치 기준";
+        HistoryCaption = Loc.T("커밋 {0:N0}건 · 저장소 {1}개 · 지금 브랜치 기준", found.Count, found.Select(c => c.Repo).Distinct().Count());
     }
 
     [RelayCommand]

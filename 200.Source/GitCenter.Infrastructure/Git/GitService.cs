@@ -795,6 +795,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
 
         step.Outcome = StepOutcome.Skipped;
         step.Message = $"지금 브랜치가 {current} 입니다 — 작업 브랜치({work})가 아니라 건너뛰었습니다.";
+        step.NextAction = BulkNextAction.Switch;
         return true;
     }
 
@@ -852,12 +853,8 @@ public sealed class GitService(IGitRunner runner) : IGitService
         }
 
         var current = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
-        if (current == defaultBranch)
-        {
-            step.Outcome = StepOutcome.Skipped;
-            step.Message = $"지금이 {defaultBranch} 입니다.";
-            return;
-        }
+        // 계약: 지금 브랜치가 가져올 브랜치와 같으면 원격의 같은 브랜치를 합친다 — 올리기가 거부된(갈라진) 저장소를 이 단추로 푼다
+        var sameBranch = current == defaultBranch;
 
         if (await NotOnWorkBranchAsync(repo, options, current, step, ct).ConfigureAwait(false))
         {
@@ -868,11 +865,26 @@ public sealed class GitService(IGitRunner runner) : IGitService
         await _runner.RunAsync(repo.Path,
             ["fetch", options.RemoteName, defaultBranch], ct, options.TimeoutSeconds).ConfigureAwait(false);
 
-        var reference = await ResolveDefaultRefAsync(repo, defaultBranch, ct).ConfigureAwait(false);
+        string? reference;
+        if (sameBranch)
+        {
+            // 함정: 같은 이름의 로컬 브랜치는 자기 자신이라 합칠 것이 없다 — 원격 추적 ref 만 본다
+            var remoteRef = $"{options.RemoteName}/{defaultBranch}";
+            var known = await _runner.RunAsync(repo.Path,
+                ["rev-parse", "--verify", "--quiet", $"refs/remotes/{remoteRef}"], ct, 20).ConfigureAwait(false);
+            reference = known.Ok ? remoteRef : null;
+        }
+        else
+        {
+            reference = await ResolveDefaultRefAsync(repo, defaultBranch, ct).ConfigureAwait(false);
+        }
+
         if (reference is null)
         {
             step.Outcome = StepOutcome.Skipped;
-            step.Message = $"{defaultBranch} 브랜치가 이 저장소에 없어 병합하지 않았습니다.";
+            step.Message = sameBranch
+                ? $"지금이 {defaultBranch} 이고 원격에 같은 브랜치가 없습니다."
+                : $"{defaultBranch} 브랜치가 이 저장소에 없어 병합하지 않았습니다.";
             return;
         }
 
@@ -893,6 +905,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
         {
             step.Outcome = StepOutcome.Conflict;
             step.Message = $"충돌 {conflicts.Count}건 — 병합이 멈춰 있습니다.";
+            step.NextAction = BulkNextAction.Conflict;
             step.ConflictPaths.AddRange(conflicts.Select(c => c.Path));
             step.Detail = result.Text;
             return;
@@ -949,6 +962,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
         {
             step.Outcome = StepOutcome.Conflict;
             step.Message = $"충돌 {conflicts.Count}건";
+            step.NextAction = BulkNextAction.Conflict;
             step.ConflictPaths.AddRange(conflicts.Select(c => c.Path));
         }
         else
@@ -1102,7 +1116,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
     private async Task PushAsync(RepoEntry repo, BulkOperationOptions options, BulkStepResult step, CancellationToken ct)
     {
         var branch = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(branch) || branch == "(detached)")
+        if (string.IsNullOrEmpty(branch))
         {
             step.Outcome = StepOutcome.Skipped;
             step.Message = "브랜치가 분리돼 있어 올리지 않았습니다.";
@@ -1166,9 +1180,11 @@ public sealed class GitService(IGitRunner runner) : IGitService
 
         step.Outcome = StepOutcome.Failed;
         // 계약: 거부당하면 force 를 권하지 않는다 — 먼저 받아서 합치라고 적는다
-        step.Message = result.Text.Contains("rejected", StringComparison.OrdinalIgnoreCase)
+        var rejected = result.Text.Contains("rejected", StringComparison.OrdinalIgnoreCase);
+        step.Message = rejected
             ? "거부됐습니다 — 원격이 앞서 있습니다. 먼저 받아서 합쳐 주십시오."
             : FirstLine(result.Text);
+        step.NextAction = rejected ? BulkNextAction.Merge : string.Empty;
         step.Detail = result.Text;
     }
 
@@ -1257,7 +1273,9 @@ public sealed class GitService(IGitRunner runner) : IGitService
     private async Task<string> CurrentBranchAsync(RepoEntry repo, CancellationToken ct)
     {
         var result = await _runner.RunAsync(repo.Path, ["rev-parse", "--abbrev-ref", "HEAD"], ct, 20).ConfigureAwait(false);
-        return result.Ok ? result.StdOut.Trim() : string.Empty;
+        var name = result.Ok ? result.StdOut.Trim() : string.Empty;
+        // 함정: 분리된 HEAD 는 이름이 "HEAD" 로 나온다 — 브랜치 이름으로 쓰면 push HEAD:HEAD 가 돼 거부된다
+        return name == "HEAD" ? string.Empty : name;
     }
 
     private async Task<bool> IsDirtyAsync(RepoEntry repo, CancellationToken ct)

@@ -157,7 +157,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<string> Themes => ThemeManager.ThemeNames;
 
-    public IReadOnlyList<string> Languages { get; } = [Loc.Korean, Loc.English];
+    // 계약: 목록은 Core 의 LocLanguages.All 에서 만든다 — 코드를 박아 두면 Core 가 언어를 더해도 빠진다
+    public IReadOnlyList<string> Languages { get; } =
+        Jhj.Core.Wpf.Localization.LocLanguages.All.Select(l => l.Code).ToList();
 
     /// 계약: 화면 배율 선택지 — AppSettings.UiScale 과 MainWindow 의 조임 범위(0.8~1.5) 안이어야 한다
     public IReadOnlyList<double> Scales { get; } = [0.9, 1.0, 1.1, 1.25];

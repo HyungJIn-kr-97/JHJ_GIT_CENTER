@@ -263,15 +263,12 @@ public sealed class IconChoicePreviewConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
 }
 
-/// <summary>언어 키("ko"·"en") → 그 언어로 적은 이름.</summary>
+/// <summary>언어 키("en"·"ko"·"zh") → 그 언어로 적은 이름. 이름의 정본은 Core 의 LocLanguages 다.</summary>
 /// 계약: 언어 이름은 번역하지 않는다 — 읽을 줄 모르는 언어로 보이면 되돌아올 수 없다
 public sealed class LanguageLabelConverter : IValueConverter
 {
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => (value as string) switch
-    {
-        Loc.English => "English",
-        _ => "한국어"
-    };
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        Jhj.Core.Wpf.Localization.LocLanguages.NameOf(value as string);
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
 }

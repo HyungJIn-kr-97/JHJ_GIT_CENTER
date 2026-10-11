@@ -30,7 +30,7 @@ public sealed partial class MainViewModel
     private string _excludeText = string.Empty;
 
     [ObservableProperty]
-    private string _excludeCaption = "한 줄에 하나씩 적습니다. 고른 저장소의 .git/info/exclude 에 없는 줄만 덧붙입니다 — 커밋되지 않고, 이미 추적 중인 파일에는 효과가 없습니다.";
+    private string _excludeCaption = Loc.T("한 줄에 하나씩 적습니다. 고른 저장소의 .git/info/exclude 에 없는 줄만 덧붙입니다 — 커밋되지 않고, 이미 추적 중인 파일에는 효과가 없습니다.");
 
     /// 계약: 켜면 .git/info/exclude 대신 작업 트리 맨 위 .gitignore 에 쓴다 — 저장소마다 미커밋 변경이 하나 생긴다
     [ObservableProperty]
@@ -42,9 +42,9 @@ public sealed partial class MainViewModel
     partial void OnExcludeToGitignoreChanged(bool value)
     {
         ExcludePreview.Clear();
-        ExcludeCaption = value
+        ExcludeCaption = Loc.T(value
             ? "고른 저장소의 .gitignore 에 없는 줄만 덧붙입니다(없으면 만듭니다) — 저장소마다 미커밋 변경이 하나 생기고, 커밋은 직접 하셔야 합니다."
-            : "고른 저장소의 .git/info/exclude 에 없는 줄만 덧붙입니다 — 커밋되지 않고, 이미 추적 중인 파일에는 효과가 없습니다.";
+            : "고른 저장소의 .git/info/exclude 에 없는 줄만 덧붙입니다 — 커밋되지 않고, 이미 추적 중인 파일에는 효과가 없습니다.");
     }
 
     // 왜: 미리 본 뒤 줄을 고치면 목록이 옛 줄 기준이다 — 고치는 순간 비워 다시 보게 한다
@@ -61,13 +61,13 @@ public sealed partial class MainViewModel
 
         if (rules.Count == 0)
         {
-            ExcludeCaption = "덧붙일 줄을 적어 주십시오.";
+            ExcludeCaption = Loc.T("덧붙일 줄을 적어 주십시오.");
             return;
         }
 
         if (rules.FirstOrDefault(BlanketRules.Contains) is { } blanket)
         {
-            ExcludeCaption = $"「{blanket}」 는 새 파일을 통째로 가립니다 — 일괄로 넣지 않습니다.";
+            ExcludeCaption = Loc.T("「{0}」 는 새 파일을 통째로 가립니다 — 일괄로 넣지 않습니다.", blanket);
             return;
         }
 
@@ -75,7 +75,7 @@ public sealed partial class MainViewModel
         var targets = SelectedShown().Where(r => r.Entry.Health == RepoHealth.Ok).ToList();
         if (targets.Count == 0)
         {
-            ExcludeCaption = "고른 저장소가 없습니다 — 저장소 관리에서 먼저 고르십시오.";
+            ExcludeCaption = Loc.T("고른 저장소가 없습니다 — 저장소 관리에서 먼저 고르십시오.");
             return;
         }
 
@@ -97,8 +97,8 @@ public sealed partial class MainViewModel
         await SaveSettingsAsync().ConfigureAwait(true);
 
         ExcludeCaption = ExcludePreview.Count == 0
-            ? $"고른 저장소 {targets.Count}개에 이미 다 들어 있습니다 — 쓸 것이 없습니다."
-            : $"고른 저장소 {targets.Count}개 중 {ExcludePreview.Count}개의 {ExcludeTarget} 에 줄이 더해집니다. 맞으면 「적용」을 누르십시오.";
+            ? Loc.T("고른 저장소 {0}개에 이미 다 들어 있습니다 — 쓸 것이 없습니다.", targets.Count)
+            : Loc.T("고른 저장소 {0}개 중 {1}개의 {2} 에 줄이 더해집니다. 맞으면 「적용」을 누르십시오.", targets.Count, ExcludePreview.Count, ExcludeTarget);
     }
 
     [RelayCommand]
@@ -107,7 +107,7 @@ public sealed partial class MainViewModel
         var changes = ExcludePreview.ToList();
         if (changes.Count == 0)
         {
-            ExcludeCaption = "먼저 「미리 보기」를 눌러 더해질 줄을 확인하십시오.";
+            ExcludeCaption = Loc.T("먼저 「미리 보기」를 눌러 더해질 줄을 확인하십시오.");
             return;
         }
 
@@ -127,6 +127,6 @@ public sealed partial class MainViewModel
         }
 
         ExcludePreview.Clear();
-        ExcludeCaption = $"적용 {changes.Count - failed}개 · 실패 {failed}개 — 더한 줄은 작업 로그에 있습니다. 「상태 새로 고침」을 하면 목록에 비칩니다.";
+        ExcludeCaption = Loc.T("적용 {0}개 · 실패 {1}개 — 더한 줄은 작업 로그에 있습니다. 「상태 새로 고침」을 하면 목록에 비칩니다.", changes.Count - failed, failed);
     }
 }

@@ -442,7 +442,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Button Style="{StaticResource RowButton}"
-                                                Command="{Binding DataContext.GoToRepoCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                Command="{Binding DataContext.OpenRepoHistoryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}">
                                             <StackPanel>
                                                 <StackPanel Orientation="Horizontal">

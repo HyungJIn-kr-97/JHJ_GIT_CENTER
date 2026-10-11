@@ -123,14 +123,38 @@ public sealed class AppSettings
     /// 계약: pull 은 언제나 --ff-only 다 — 끄면 merge 커밋을 허용한다. force push 는 어느 설정으로도 열지 않는다
     public bool FastForwardOnly { get; set; } = true;
 
-    /// 계약: 일괄 「받기」·「현재로 병합」이 가져올 원격 브랜치 — 비우면 저장소마다 기본 브랜치를 찾는다
-    public string ReceiveBranch { get; set; } = "main";
+    /// 계약: 내가 일하는 브랜치(공통) — 비우면 지금 체크아웃된 브랜치를 그대로 쓴다. 저장소별 값(RepoBranches)이 이것을 덮는다
+    public string WorkBranch { get; set; } = string.Empty;
 
-    /// 계약: 일괄 「올리기」가 닿을 원격 브랜치 — 비우면 지금 브랜치와 같은 이름으로 올린다
-    public string PushBranch { get; set; } = "main";
+    /// 계약: 코드가 모이는 브랜치(공통) — 「병합」이 여기서 받아 오고 「올리기」가 여기로 올린다. 비우면 받기는 기본 브랜치, 올리기는 지금 브랜치다
+    public string UploadBranch { get; set; } = "main";
+
+    /// 계약: 저장소 Id → 그 저장소만의 작업·업로드 브랜치. 여기 없거나 빈 칸이면 공통 값(WorkBranch · UploadBranch)을 따른다
+    public Dictionary<string, RepoBranchRule> RepoBranches { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// 계약: 옛 이름이다 — 값이 남은 PC 만 JsonSettingsStore.WithDefaults 가 WorkBranch · UploadBranch 로 한 번 옮기고 비운다
+    public string? ReceiveBranch { get; set; }
+
+    public string? PushBranch { get; set; }
+
+    /// <summary>저장소 하나의 브랜치 규칙을 적는다 — 둘 다 비면 지워서 공통 값을 따르게 한다.</summary>
+    public void AssignBranches(string repoId, string? work, string? upload)
+    {
+        var rule = new RepoBranchRule { Work = work?.Trim() ?? string.Empty, Upload = upload?.Trim() ?? string.Empty };
+        if (rule.IsEmpty)
+        {
+            RepoBranches.Remove(repoId);
+            return;
+        }
+
+        RepoBranches[repoId] = rule;
+    }
 
     /// 계약: 사용자가 「작업 중」으로 찍어 둔 저장소 Id — 목록 거르개와 「작업 중만 선택」이 읽는다
     public HashSet<string> WorkingRepos { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// 계약: 「공통 무시 목록」에 적어 둔 줄이다 — 저장소의 .git/info/exclude 에 덧붙일 후보일 뿐, 적용은 미리 보기를 거친다
+    public List<string> CommonExcludes { get; set; } = [];
 
     public const string DefaultCommitSubject = "JHJ Git Center {기능} 처리 - {그룹}";
 
@@ -173,6 +197,12 @@ public sealed class AppSettings
 
     public string Hotkey { get; set; } = DefaultHotkey;
 
+    /// 계약: 「단축키 2」부터의 추가 칸 — Hotkey 와 합쳐 넷까지다(Core HotkeyService.MaxCount)
+    public List<string> ExtraHotkeys { get; set; } = [];
+
+    /// 계약: 창을 열 때마다 저장소 상태를 다시 읽는다 — 로컬만 읽고 원격에 닿지 않는다
+    public bool RefreshOnOpen { get; set; } = false;
+
     public bool StartAtLogin { get; set; } = false;
 
     public bool MinimizeToTray { get; set; } = true;
@@ -213,6 +243,13 @@ public sealed class AppSettings
 
     public bool DiagnosticsEnabled { get; set; } = true;
 
+    /// 계약: 예약 자동 업데이트 세 칸 — 화면은 Core 의 UpdatePanel, 규격은 JHJ_CS_CORE/300.Docs/030.설정-창-기본-규격.md §2 다
+    public bool AutoUpdateEnabled { get; set; } = true;
+
+    public string AutoUpdateTime { get; set; } = "04:00";
+
+    public bool AutoUpdateNotify { get; set; } = true;
+
     public void ResetToDefaults(SettingsGroup group)
     {
         var d = new AppSettings();
@@ -239,8 +276,8 @@ public sealed class AppSettings
             FastForwardOnly = d.FastForwardOnly;
             CommitMessageTemplate = d.CommitMessageTemplate;
             CommitBodyTemplate = d.CommitBodyTemplate;
-            ReceiveBranch = d.ReceiveBranch;
-            PushBranch = d.PushBranch;
+            WorkBranch = d.WorkBranch;
+            UploadBranch = d.UploadBranch;
             AutoStashBeforePull = d.AutoStashBeforePull;
         }
 
@@ -253,6 +290,8 @@ public sealed class AppSettings
             CompactRows = d.CompactRows;
             ShowActivityPanel = d.ShowActivityPanel;
             Hotkey = d.Hotkey;
+            ExtraHotkeys = [.. d.ExtraHotkeys];
+            RefreshOnOpen = d.RefreshOnOpen;
             MinimizeToTray = d.MinimizeToTray;
             PinTrayIcon = d.PinTrayIcon;
             AppIcon = d.AppIcon;
@@ -273,6 +312,17 @@ public enum SettingsGroup
     Git,
     Display,
     All
+}
+
+/// <summary>저장소 하나의 브랜치 규칙 — 빈 칸은 「공통 값을 따른다」는 뜻이다.</summary>
+public sealed class RepoBranchRule
+{
+    public string Work { get; set; } = string.Empty;
+
+    public string Upload { get; set; } = string.Empty;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsEmpty => Work.Length == 0 && Upload.Length == 0;
 }
 
 /// <summary>스캔할 루트 폴더 한 줄.</summary>

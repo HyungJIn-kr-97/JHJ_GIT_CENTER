@@ -117,6 +117,10 @@ public sealed partial class RepoRow : ObservableObject
     [ObservableProperty]
     private bool _isWorking;
 
+    /// 계약: 이 저장소만의 브랜치 규칙을 한 줄로 — 공통 값을 따르면 빈 글이다(MainViewModel.SyncBranchRules 가 적는다)
+    [ObservableProperty]
+    private string _branchRuleText = string.Empty;
+
     /// 계약: 마지막 일괄 작업 결과 한 줄 — 다음 작업을 시작하면 지워진다
     [ObservableProperty]
     private string? _lastResult;

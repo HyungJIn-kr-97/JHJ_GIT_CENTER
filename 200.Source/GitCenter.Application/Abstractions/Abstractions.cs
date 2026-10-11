@@ -83,6 +83,24 @@ public interface IGitService
 
     /// 계약: 충돌이 다 풀린 병합을 커밋으로 맺는다 — 병합 중일 때만 하고 리베이스·체리픽은 건드리지 않는다
     Task<ConflictActionResult> ConcludeMergeAsync(RepoEntry repo, CancellationToken cancellationToken);
+
+    /// 계약: 읽기뿐이다 — git config 한 번과 파일 존재 확인만 하고 원격에는 닿지 않는다
+    Task<RepoAudit> ReadAuditAsync(RepoEntry repo, CancellationToken cancellationToken);
+
+    /// 계약: 저장소 로컬 설정(--local)에만 쓴다 — 전역은 건드리지 않는다. 실패하면 그 까닭을, 되면 null 을 돌려준다
+    Task<string?> WriteAuthorAsync(RepoEntry repo, string name, string email, CancellationToken cancellationToken);
+
+    /// 계약: .git/info/exclude 의 줄(빈 줄·주석 제외)을 읽는다 — 파일이 없으면 빈 목록이다
+    Task<IReadOnlyList<string>> ReadExcludeAsync(RepoEntry repo, CancellationToken cancellationToken);
+
+    /// 계약: 없는 줄만 끝에 덧붙인다 — 있는 줄은 지우지도 고치지도 않는다. 실패하면 그 까닭을, 되면 null 을 돌려준다
+    Task<string?> AppendExcludeAsync(RepoEntry repo, IReadOnlyList<string> lines, CancellationToken cancellationToken);
+
+    /// 계약: 작업 트리 맨 위 .gitignore 의 줄(빈 줄·주석 제외)을 읽는다 — 파일이 없으면 빈 목록이다
+    Task<IReadOnlyList<string>> ReadGitignoreAsync(RepoEntry repo, CancellationToken cancellationToken);
+
+    /// 계약: 없는 줄만 끝에 덧붙이고 파일이 없으면 만든다 — 스테이지·커밋은 하지 않는다. 실패하면 그 까닭을, 되면 null 을 돌려준다
+    Task<string?> AppendGitignoreAsync(RepoEntry repo, IReadOnlyList<string> lines, CancellationToken cancellationToken);
 }
 
 /// <summary>일괄 작업에 넘기는 값 — 커밋 메시지처럼 작업마다 다른 것만 담는다.</summary>
@@ -102,11 +120,23 @@ public sealed class BulkOperationOptions
 
     public string RemoteName { get; set; } = "origin";
 
-    /// 계약: 「받기」·「현재로 병합」이 가져올 원격 브랜치 — 비면 그 저장소의 기본 브랜치를 찾아 쓴다
-    public string ReceiveBranch { get; set; } = string.Empty;
+    /// 계약: 내가 일하는 브랜치(공통) — 비면 지금 브랜치를 그대로 쓴다. 지금 브랜치가 이것과 다르면 병합·커밋·올리기를 건너뛴다
+    public string WorkBranch { get; set; } = string.Empty;
 
-    /// 계약: 「올리기」가 닿을 원격 브랜치 — 비면 지금 브랜치와 같은 이름으로 올린다. 어느 쪽이든 force 는 없다
-    public string PushBranch { get; set; } = string.Empty;
+    /// 계약: 코드가 모이는 브랜치(공통) — 받기·병합이 여기서 가져오고 올리기가 여기로 올린다. 비면 받기는 기본 브랜치, 올리기는 지금 브랜치다
+    public string UploadBranch { get; set; } = string.Empty;
+
+    /// 계약: 저장소 Id → 그 저장소만의 규칙. 빈 칸은 공통 값을 따른다
+    public IReadOnlyDictionary<string, RepoBranchRule> RepoBranches { get; set; } = new Dictionary<string, RepoBranchRule>();
+
+    /// 계약: 「병합」이 이번 한 번 가져올 브랜치 — 비면 저장소마다 업로드 브랜치를 가져온다
+    public string MergeSource { get; set; } = string.Empty;
+
+    public string WorkBranchFor(RepoEntry repo) =>
+        RepoBranches.TryGetValue(repo.Id, out var rule) && rule.Work.Length > 0 ? rule.Work : WorkBranch.Trim();
+
+    public string UploadBranchFor(RepoEntry repo) =>
+        RepoBranches.TryGetValue(repo.Id, out var rule) && rule.Upload.Length > 0 ? rule.Upload : UploadBranch.Trim();
 
     public int TimeoutSeconds { get; set; } = 120;
 }

@@ -1,0 +1,101 @@
+﻿<UserControl x:Class="GitCenter.App.Views.SettingsTabs.DisplayTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf">
+    <!-- 설정 「화면」 탭 — 규격은 JHJ_CS_CORE/300.Docs/030.설정-창-기본-규격.md §3. 계약: 로직이 없는 탭 조각이다 — DataContext(SettingsViewModel)는 SettingsWindow 에서 물려받는다 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+        <StackPanel Margin="0,0,6,0">
+
+            <!-- 테마 — 고르는 즉시 화면에 비친다 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="테마" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"
+                               Text="고르면 바로 화면에 비칩니다. 저장은 아래 「적용」입니다." />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="210" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="명암" VerticalAlignment="Center" Margin="0,5" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding Themes}"
+                                  SelectedItem="{Binding Theme}" Margin="0,5">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource ThemeLabel}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Grid.Column="2" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                   Margin="12,5,0,5" TextWrapping="Wrap"
+                                   Text="「Windows 설정 따름」이면 작업 표시줄에서 밝게·어둡게를 바꿀 때 이 앱도 따라 바뀝니다." />
+
+                        <TextBlock Grid.Row="1" Text="색" VerticalAlignment="Center" Margin="0,5" />
+                        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Palettes}"
+                                  SelectedItem="{Binding Palette}" Margin="0,5">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="12" Height="12" VerticalAlignment="Center"
+                                                 Fill="{Binding Converter={StaticResource PaletteSwatch}}" />
+                                        <TextBlock Text="{Binding Converter={StaticResource PaletteLabel}}"
+                                                   Margin="9,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="12,5,0,5" TextWrapping="Wrap"
+                                   Text="트레이에 함께 상주하는 JHJ 앱과 색으로 갈립니다 — 이 앱의 기본은 보라입니다." />
+
+                        <TextBlock Grid.Row="2" Text="화면 배율" VerticalAlignment="Center" Margin="0,5" />
+                        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Scales}"
+                                  SelectedItem="{Binding UiScale}" Margin="0,5">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource ScaleLabel}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="12,5,0,5" TextWrapping="Wrap"
+                                   Text="글자와 여백을 함께 키웁니다. 높은 해상도에서 글자가 작게 보일 때 올립니다." />
+
+                        <TextBlock Grid.Row="3" Text="언어" VerticalAlignment="Center" Margin="0,5" />
+                        <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Languages}"
+                                  SelectedItem="{Binding Language}" Margin="0,5">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Converter={StaticResource LanguageLabel}}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 배치 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="배치" Style="{StaticResource SectionTitle}" />
+                    <CheckBox Content="목록을 조밀하게 — 줄 높이를 줄여 한 화면에 더 담습니다"
+                              IsChecked="{Binding CompactRows}" />
+                    <CheckBox Content="오른쪽 「작업 로그」 단을 보입니다 — 끄면 가운데 상세가 넓어집니다"
+                              Margin="0,9,0,0" IsChecked="{Binding ShowActivityPanel}" />
+                </StackPanel>
+            </Border>
+
+            <Button Content="{loc:Tr '기본값으로'}" Command="{Binding ResetDisplayCommand}"
+                    HorizontalAlignment="Left" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

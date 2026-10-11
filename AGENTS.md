@@ -9,7 +9,7 @@
 |---|---|
 | `200.Source/` | 솔루션·프로젝트 4개(Core · Application · Infrastructure · App) — 고치는 곳은 여기뿐 |
 | `300.Docs/` | 계약 문서 — `GitHub-Desktop-목록-읽기.md`(LevelDB·snappy 를 푸는 근거와 한계). 소스에는 경로 한 줄만 둔다 |
-| `800.Deploy/` | `Build-Exe.bat` · `publish.ps1` · `bump-version.ps1`. 산출물 `publish/` 는 git 제외 |
+| `800.Deploy/` | `Build-Exe.bat` · `publish.ps1` · `bump-version.ps1` · `Release.bat`(`release.ps1` — 커밋·빌드·push·GitHub Release) · `prune-releases.ps1`. 산출물 `publish/` 는 git 제외 |
 
 여러 git 저장소를 한 화면에서 다루는 **Windows 데스크톱 앱**(WPF · `net10.0-windows`). 서버 배포 대상이 아니다.
 ★ **기본 편의 기능(트레이 · 단일 인스턴스 · 테마 · 언어 · 로그 · 설정 저장 · 시작 프로그램 · 단축키 · 외부 도구 열기 · 프로세스 실행)은
@@ -40,6 +40,17 @@
   스크롤바·체크박스·콤보박스·말풍선·진행막대는 **템플릿을 새로 씌웠다**(Windows 기본은 어두운 테마에서 밝은 회색으로 남는다).
 - 함정: 알약 모서리를 `CornerRadius="999"` 로 주면 WPF 가 가로까지 둥글려 **타원**이 된다 — `Pill`(16)·`PillSm`(9)·`PillXs`(3) 중에서 고른다.
 - 함정: 글상자의 흐린 안내 문구(`Tag`)는 **바인딩으로** 켠다 — `ControlTemplate.Triggers` 의 `DataTrigger`(`Text` = "")는 켜지지 않았다.
+- 계약: 설정 창은 **탭마다 파일 하나**다(`Views/SettingsTabs/*Tab.xaml`) — 공통 탭 「일반」·「화면」·「아이콘」이 먼저 오고, 세로 금(`TabGroupDivider`) 뒤에 전용 탭 셋(목록 출처 · 동기화 · git 동작)이 온다.
+  탭 조각에는 로직을 두지 않는다 — `DataContext` 는 `SettingsWindow` 에서 물려받고, 줄 단추는 `AncestorType=Window` 로 명령을 찾는다. 규격은 `JHJ_CS_CORE/300.Docs/030.설정-창-기본-규격.md`.
+  계약: 「일반」 탭의 단축키 줄·진단 보고서는 Core 형식(`HotkeySlotEditor` · `DiagnosticsReportBuilder`)을 물린 것이다 — 판정·등록·가리기를 여기서 다시 짜지 않는다.
+  단축키는 줄의 「저장」에서 **즉시 등록**되고 설정 파일 저장은 「적용」이다. 추가 칸은 `Settings.ExtraHotkeys`(1번 칸 `Hotkey` 와 합쳐 넷까지).
+  ⛔ 진단 보고서에 저장소 경로·원격 주소·작성자를 넣지 않는다 — 사용자가 GitHub 이슈에 그대로 붙인다(`SettingsViewModel.BuildDiagnostics`).
+  함정: 「화면」 탭의 「기본값으로」는 아직 「일반」·「아이콘」 탭의 값(단축키 · 트레이 · 아이콘)까지 되돌린다 — 탭별로 가르는 일이 남았다.
+  계약: 창 머리 「앱 공유하기」의 「배포하기」는 Core 의 `AppDeploy` 를 물린 것이다 — 개발 장비 + 저장소 소유자 계정일 때만 보이고,
+  `JHJ_DEV\800.Deploy\deploy-history.jsonl` 에 시작 기록을 쓴 뒤에만 `release.ps1` 콘솔을 연다(030 규격 §1-1). 판정·이력을 여기서 다시 짜지 않는다.
+  계약: 「앱 공유하기」 셋(winget 명령 · 설치 파일 주소 · 내려받기)의 좌표는 `Services/AppUpdate.cs` 다 — `SetupAssetName` 은 `publish.ps1` 의 `$SetupAsset`,
+  `WingetId` 는 `winget-manifest.ps1` 의 `$id` 와 같아야 한다. 설치 파일은 앱 exe 그대로이고 `--silent` 를 주면 묻지 않고 설치한다(`App.ConfirmInstall`).
+  함정: winget 명령은 `microsoft/winget-pkgs` 가 매니페스트를 받아들인 뒤에만 된다 — 스크립트로 매니페스트를 쓰는 것만으로는 안 된다.
 - 계약: 설정 창의 고르는 상자는 **내부 키를 그대로 보이지 않는다** — `ThemeLabel`·`PaletteLabel`·`LanguageLabel`·`ScaleLabel` 컨버터를 거친다.
 - 계약: 명암·색·배율·언어는 **고르는 즉시** 비친다(`SettingsViewModel` 의 감싼 속성). 「적용」은 저장이다.
   `AppSettings` 는 알림이 없는 보통 객체라 **감싸지 않으면 가로챌 수 없다.**
@@ -52,7 +63,35 @@
 - 계약: 오른쪽 단은 **「변경 내용」·「작업 로그」 두 탭**이다. 가운데에서 변경 파일을 고르면 `SelectedChange` 가 바뀌고 0번 탭으로 옮긴다.
   계약: 이 단은 **접힌 채(손잡이만)로 시작한다** — `MainViewModel.IsRightPanelOpen` 이 펴고, 변경 파일을 누르면 저절로 펴진다.
   설정 「작업 로그 단」을 끄면 손잡이까지 숨는다(`MainWindow.ApplyDisplaySettings`).
-- 계약: 화면은 **제목 띠의 탭 둘**이다 — 0 「대시보드」 · 1 「저장소 관리」(`MainViewModel.PageIndex`, 마지막 화면은 `Settings.StartPage`).
+- 계약: 화면은 **제목 띠의 탭 넷**이다 — 0 「대시보드」 · 1 「저장소 관리」 · 2 「커밋 내역」 · 3 「점검」(`MainViewModel.PageIndex`). `Settings.StartPage` 에는 0·1 만 남긴다.
+  계약: 「커밋 내역」은 대시보드 줄의 `ChartRow.Tag` 가 연다 — 캘린더는 `yyyy-MM-dd..yyyy-MM-dd`, 저장소 줄은 `repo:<Id>`, 마지막 커밋 시점은 `age:<일>..<일>` 이다(`MainViewModel.History.cs`).
+  함정: 저장소·시점 줄은 최근 735일만 읽는다 — 캘린더가 읽어 둔 가장 긴 기간과 같은 값이다.
+- 계약: 제목 띠의 「도움말」은 **지금 화면의 요소를 차례로 비춘다** — 걸음 목록은 `Views/MainWindow.Tour.cs`, 그리기는 `Controls/TourOverlay` 다.
+  화면에 기능을 더하면 그 화면의 걸음을 하나 더하고, 비출 요소에 `x:Name` 을 붙인다. 보이지 않는 요소의 걸음은 건너뛴다.
+  함정: 쪽지 크기를 잴 때 `Margin` 을 먼저 지운다 — `DesiredSize` 가 여백을 포함해 앞 걸음의 자리만큼 크게 재진다.
+- 계약: 「점검」의 표는 **읽기 전용 보고**다(`MainViewModel.Audit.cs` · `IGitService.ReadAuditAsync`) — 저장소마다 `git config` 한 번과 파일 확인뿐이다.
+  「다름」은 다수와 견준 것이다 — 작성자 메일·`autocrlf` 는 가장 많이 쓰인 값이 기준이다.
+- ★ 계약: 「작성자 일괄 적용」은 `user.name`·`user.email` 만, **저장소 로컬(`--local`)에만**, **미리 보기에 오른 저장소에만** 쓴다(`WriteAuthorAsync`). 대상은 `SelectedShown` 이다.
+- ★ 계약: 「공통 무시 목록」은 고른 저장소의 `.git/info/exclude` 에 **없는 줄만 끝에 덧붙인다**(`MainViewModel.Exclude.cs` · `AppendExcludeAsync`) — 있는 줄은 지우지도 고치지도 않는다.
+  계약: 「.gitignore 에 쓰기」를 켜면 같은 줄을 작업 트리 맨 위 `.gitignore` 에 덧붙인다(없으면 만든다 · `AppendGitignoreAsync`) — 스테이지·커밋은 하지 않고, 있던 줄바꿈(CRLF/LF)을 따른다.
+  적어 둔 줄은 `Settings.CommonExcludes` 에 남고, 통째로 가리는 줄(`*` · `**` · `/*` 등)은 일괄로 넣지 않는다.
+  함정: exclude 의 자리는 `rev-parse --git-path info/exclude` 로 묻는다 — 작업 트리(worktree)는 공통 `.git` 의 파일을 쓴다.
+  ⛔ `autocrlf` 를 「작성자 일괄 적용」에 더하지 않는다 — 줄바꿈이 통째로 바뀌어 파일 전체가 변경으로 잡힌다(2026-10-11 사용자 결정). 바꾸기 전 값은 작업 로그에 남긴다.
+- 계약: 변경 파일 목록은 확장자 하나로 좁힐 수 있다 — `Changes` 는 걸러진 목록이고 채우는 길은 `SetChanges` 하나다(`MainViewModel.ChangeFilter.cs`).
+- 계약: 커밋 캘린더의 **기간과 보기 형식은 독립**이다 — 기간은 `Settings.DashboardChartKinds["calendar.range"]`, 세로·선은 30일=날 · 90일=주 · 180일 이상=달로 묶는다.
+  함정: 「달력」은 칸 높이가 16px 미만이면 잔디로 대신 그린다 — 1년 이상에서 잔디와 같아 보이는 것은 고장이 아니다.
+- 계약: 일괄 커밋 글상자는 「커밋 제목」·「메시지」 둘이고 자리표 `{기능}`·`{그룹}`·`{저장소}` 는 **누를 때** 채운다(`MainViewModel.FillCommitText`). 본문은 `commit -m` 을 두 번 준다.
+- ★ 계약: 브랜치 설정은 둘이다 — 「작업 브랜치」(`Settings.WorkBranch`, 내가 일하는 곳)와 「업로드 브랜치」(`Settings.UploadBranch`, 코드가 모이는 곳).
+  저장소별 값(`Settings.RepoBranches`)이 공통 값을 덮고, 일괄 작업이 저장소마다 풀어 쓴다(`BulkOperationOptions.WorkBranchFor`·`UploadBranchFor`).
+  계약: 「병합」은 고른 브랜치(비면 업로드 브랜치)를 `fetch` 한 뒤 지금 브랜치로 합치고, 「올리기」는 업로드 브랜치로 `push <remote> HEAD:refs/heads/<업로드>` 한다 — force 없음 · upstream 안 바꿈.
+  계약: 지금 브랜치가 작업 브랜치와 다르면 병합·커밋·올리기를 건너뛴다 — 단 작업 브랜치가 그 저장소에 없으면 막지 않는다(`GitService.NotOnWorkBranchAsync`).
+  계약: 「전환」은 고른 저장소를 작업 브랜치로 `switch` 한다 — 로컬에 없으면 원격의 같은 이름을 추적해 만들고, 둘 다 없으면 건너뛴다. 강제 옵션은 없다.
+  함정: 원격에 없는 이름으로는 올리지 않는다 — 그대로 올리면 새 원격 브랜치가 조용히 생긴다(2026-10-11 실측).
+  계약: 브랜치·그룹은 **있는 것 중에서 고른다**(고르는 상자) — 손으로 적는 칸은 「새 그룹 이름」 하나뿐이다. 줄 하나의 값은 줄을 두 번 누르거나 톱니로 여는 쪽지가 고친다(`MainViewModel.Branches.cs`).
+  함정: 이 앱의 `ComboBox` 틀은 고른 줄을 `ToString` 으로 그린다 — 줄 객체가 `ToString` 을 안 덮으면 레코드 모양이 보인다.
+  계약: 저장소 줄을 끌어 그룹 머리·다른 그룹의 줄·거르개 단의 「그룹」 줄에 놓으면 옮겨진다(`Views/MainWindow.Repos.cs`).
+- 계약: 필터 단은 조건 넷(그룹 · 상태 · 작업 · 브랜치)을 겹쳐 건다(`MainViewModel.Facets.cs`). 「작업 중」(`RepoRow.IsMine` ↔ `Settings.WorkingRepos`)은 일괄 작업이 도는 중(`IsWorking`)과 다른 뜻이다.
+- 함정: 단추 템플릿의 내용 가로 맞춤은 `HorizontalContentAlignment` 를 따른다 — `Center` 로 박으면 줄 모양 단추(필터 단)가 가운데로 몰린다.
   제목 띠는 **테마와 무관하게 짙다** — 띠 위의 글자·단추는 테마 브러시가 아니라 `Styles.xaml` 의 `Title*` 브러시를 쓴다.
 - ★ 계약: 저장소 목록은 **`RepoRow.GroupNode` 객체로 묶인다**(`PropertyGroupDescription`) — 그룹 머리가 `{Binding Name.…}` 으로 접힘·건수를 읽는다.
   `ApplyFilter` 가 `Rows` 에 넣기 전에 줄마다 `GroupNode` 를 채우고 **그룹별로 모아 세워** 넣는다(묶인 목록의 그룹 차례는 처음 나온 줄 차례다).
@@ -84,6 +123,10 @@
 - 계약: 전역 단축키는 **`Ctrl+Alt+3`** 이다 — 자리표 정본은 `JHJ_DEV/000.AGENTS_MD/060.단축키/060.단축키-대장.md`.
   기본값은 `AppSettings.DefaultHotkey` 한 곳이고, `Services/HotkeyService` 의 정적 생성자가 Core 의 되살림 값에도 넣는다.
   계약: 이미 `Ctrl+Alt+G` 를 저장한 PC 는 `JsonSettingsStore.WithDefaults` 가 **읽을 때 한 번** 새 기본값으로 옮긴다.
+- ★ 계약: 자가 업데이트는 `JHJ_CS_CORE` 의 `GithubUpdateService` 가 한다 — 이 앱은 좌표(`Services/AppUpdate.cs`)와 시작 결선(`App.xaml.cs`)만 갖는다.
+  **꾸러미 접두(`AppUpdate.PackagePrefix` = `JHJ_Git-Center`)는 `800.Deploy\publish.ps1` 의 `$PackagePrefix` 와 같아야 한다** — 어긋나면 오류 없이 「최신입니다」로 끝난다.
+  계약: 업데이트는 **설치본(`%LOCALAPPDATA%\JHJ_Git-Center\app`)에서만** 돈다 — 그 폴더는 통째로 교체되므로 다른 파일을 두는 코드를 쓰지 않는다.
+  함정: `release.ps1` 은 한글이 있어 **UTF-8 BOM** 이다. 나머지 `800.Deploy\*.ps1` 은 ASCII 로만 쓴다.
 - 계약: 배포 버전은 `Directory.Build.props` 의 `VersionPrefix` 세 자리만 올린다 — 네 번째(빌드 날짜)는 빌드가 붙인다.
 - ⛔ **버전 올리기·릴리스 생성·태그 push 는 사용자 지시가 있을 때만** 한다.
 - 빌드 전에 **이 폴더에서 띄운** `JHJ_Git-Center` 만 종료한다(`bin\` 잠금).

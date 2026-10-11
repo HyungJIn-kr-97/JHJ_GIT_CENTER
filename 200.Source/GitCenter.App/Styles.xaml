@@ -67,6 +67,9 @@
     <Geometry x:Key="IconFolder">M3,7 L3,19 A1,1 0 0,0 4,20 L20,20 A1,1 0 0,0 21,19 L21,9 A1,1 0 0,0 20,8 L12,8 L10,5 L4,5 A1,1 0 0,0 3,6 Z</Geometry>
     <Geometry x:Key="IconTerminal">M5,7 L10,12 L5,17 M12,17 L19,17</Geometry>
     <Geometry x:Key="IconCode">M8,6 L3,12 L8,18 M16,6 L21,12 L16,18</Geometry>
+    <Geometry x:Key="IconDownload">M12,4 L12,15 M7,10 L12,15 L17,10 M5,20 L19,20</Geometry>
+    <Geometry x:Key="IconLink">M10,14 A4,4 0 0,0 15.7,14 L18.5,11.2 A4,4 0 0,0 12.8,5.5 L11.5,6.8 M14,10 A4,4 0 0,0 8.3,10 L5.5,12.8 A4,4 0 0,0 11.2,18.5 L12.5,17.2</Geometry>
+    <Geometry x:Key="IconUpload">M12,16 L12,4 M7,9 L12,4 L17,9 M5,20 L19,20</Geometry>
     <Geometry x:Key="IconExternal">M14,4 L20,4 L20,10 M20,4 L11,13 M18,14 L18,19 A1,1 0 0,1 17,20 L5,20 A1,1 0 0,1 4,19 L4,7 A1,1 0 0,1 5,6 L10,6</Geometry>
     <Geometry x:Key="IconDesktop">M4,5 L20,5 A1,1 0 0,1 21,6 L21,16 A1,1 0 0,1 20,17 L4,17 A1,1 0 0,1 3,16 L3,6 A1,1 0 0,1 4,5 Z M8,21 L16,21</Geometry>
     <Geometry x:Key="IconCheck">M4.5,12.5 L9,17 L19.5,6.5</Geometry>
@@ -262,6 +265,7 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -270,7 +274,8 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{StaticResource RadiusSm}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                        <!-- 함정: 가로 맞춤을 Center 로 박으면 단추의 HorizontalContentAlignment 가 안 먹는다(필터 단 줄이 가운데로 몰렸다) -->
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"
                                           Margin="{TemplateBinding Padding}" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -495,6 +500,35 @@
     </Style>
 
     <!-- 계약: 제목 띠의 화면 탭 — 고른 탭은 밝은 판 + 강조색 밑줄. RadioButton 이라 하나만 켜진다 -->
+    <!-- 계약: 제목 띠 위의 누르는 단추 — NavTab 과 같은 글자·크기지만 고른 상태가 없다 -->
+    <Style x:Key="NavButton" TargetType="Button">
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSm}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Foreground" Value="{StaticResource TitleMutedBrush}" />
+        <Setter Property="Padding" Value="13,0" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root" CornerRadius="{StaticResource RadiusSm}" Background="Transparent"
+                            Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{StaticResource TitleHoverBrush}" />
+                            <Setter Property="Foreground" Value="{StaticResource TitleInkBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="NavTab" TargetType="RadioButton">
         <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
         <Setter Property="FontSize" Value="{StaticResource FontSm}" />
@@ -948,6 +982,21 @@
                             <Setter TargetName="Underline" Property="Background" Value="{DynamicResource DividerBrush}" />
                         </MultiTrigger>
                     </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 계약: 탭 묶음 사이의 세로 금이다 — 고를 수 없는 탭이라 누름·키보드 이동이 건너뛴다(설정 창의 공통 탭 | 전용 탭) -->
+    <Style x:Key="TabGroupDivider" TargetType="TabItem">
+        <Setter Property="IsEnabled" Value="False" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border Width="1" Height="16" Margin="10,0" VerticalAlignment="Center"
+                            Background="{DynamicResource DividerBrush}" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

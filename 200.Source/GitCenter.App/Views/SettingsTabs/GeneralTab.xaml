@@ -1,0 +1,104 @@
+<UserControl x:Class="GitCenter.App.Views.SettingsTabs.GeneralTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:upd="clr-namespace:Jhj.Core.Wpf.Updates;assembly=Jhj.Core.Wpf"
+             xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf">
+    <!-- 설정 「일반」 탭 — 규격은 JHJ_CS_CORE/300.Docs/030.설정-창-기본-규격.md §2. 계약: 화면만 그린다 — 판정·등록·보고서는 Core 형식(§4-1)이 하고 DataContext(SettingsViewModel)는 SettingsWindow 에서 물려받는다 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+        <StackPanel Margin="0,0,6,0">
+
+            <!-- 시작·트레이 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="시작과 트레이" Style="{StaticResource SectionTitle}" />
+                    <CheckBox Content="로그인할 때 자동으로 실행합니다" IsChecked="{Binding StartAtLogin}" />
+                    <CheckBox Content="작업 표시줄에 아이콘을 항상 표시합니다 — 숨겨진 아이콘 칸 밖에 둡니다"
+                              Margin="0,9,0,0" IsChecked="{Binding Settings.PinTrayIcon}" />
+                    <CheckBox Content="창을 닫으면 트레이로 보냅니다 — 끝내기는 트레이 메뉴에서 합니다"
+                              Margin="0,9,0,0" IsChecked="{Binding Settings.MinimizeToTray}" />
+                    <CheckBox Content="창을 열 때마다 상태를 다시 읽습니다 — 로컬만 읽고 원격에 닿지 않습니다"
+                              Margin="0,9,0,0" IsChecked="{Binding Settings.RefreshOnOpen}" />
+                </StackPanel>
+            </Border>
+
+            <!-- 단축키 — 줄의 상태·판정·등록은 Core 의 HotkeySlotEditor 가 갖는다 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="전역 단축키" Style="{StaticResource SectionTitle}" />
+                    <ItemsControl ItemsSource="{Binding Hotkeys.Slots}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,6">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140" />
+                                            <ColumnDefinition Width="210" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        <!-- 함정: 한글 IME 가 켜지면 글자가 조합 상태로 남는다 — 입력란에서 끈다 -->
+                                        <TextBox Grid.Column="1" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True"
+                                                 InputMethod.IsInputMethodEnabled="False"
+                                                 PreviewKeyDown="OnHotkeyKeyDown" KeyUp="OnHotkeyKeyUp"
+                                                 GotKeyboardFocus="OnHotkeyFocus" LostKeyboardFocus="OnHotkeyBlur" />
+                                        <Button Grid.Column="2" Content="{Binding PrimaryText}" Command="{Binding PrimaryCommand}"
+                                                Padding="9,4" Margin="8,0,0,0" MinWidth="56" />
+                                        <Button Grid.Column="3" Content="{Binding SecondaryText}" Command="{Binding SecondaryCommand}"
+                                                Padding="9,4" Margin="6,0,0,0" MinWidth="44" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding Message}" Margin="140,3,0,0" TextWrapping="Wrap">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Verdict}" Value="Caution">
+                                                        <Setter Property="Foreground" Value="{DynamicResource WarnBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Verdict}" Value="Blocked">
+                                                        <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Message}" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="「변경」을 누르고 입력란을 눌러 키를 누른 뒤 「저장」합니다. 「저장」하는 즉시 등록되고, 파일 저장은 아래 「적용」입니다." />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="권장: Ctrl+Alt+1~9 · Ctrl+Alt+F1~F12  /  차단: 수정키 하나(Ctrl+C) · Win 조합 · Esc·Tab·방향키" />
+                </StackPanel>
+            </Border>
+
+            <!-- 업데이트 — 화면·동작은 JHJ_CS_CORE 의 UpdatePanel 이 갖는다 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="업데이트" Style="{StaticResource SectionTitle}" />
+                    <upd:UpdatePanel DataContext="{Binding Update}" ButtonStyle="{StaticResource GhostButton}"
+                                     MutedTextStyle="{StaticResource Caption}" LinkBrush="{DynamicResource AccentBrush}" />
+                </StackPanel>
+            </Border>
+
+            <!-- 진단 정보 — 보고서의 틀과 가리기는 Core 의 DiagnosticsReportBuilder 가 갖는다 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="{loc:Tr 'Diagnostics'}" Style="{StaticResource SectionTitle}" />
+                    <CheckBox Content="사용 정보를 수집합니다 — 이 PC 에만 기록하고 어디로도 보내지 않습니다"
+                              IsChecked="{Binding Settings.DiagnosticsEnabled}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                        <Button Content="{loc:Tr 'Save to file'}" Padding="9,4" Command="{Binding SaveDiagnosticsCommand}" />
+                        <Button Content="{loc:Tr 'Open an issue'}" Padding="9,4" Margin="6,0,0,0"
+                                Command="{Binding OpenIssueCommand}" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="「이슈 열기」는 진단 정보를 복사하고 GitHub 새 이슈 화면을 엽니다. 저장소 경로·원격 주소는 넣지 않고 메일은 가립니다." />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

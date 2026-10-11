@@ -36,6 +36,28 @@ public sealed class JsonSettingsStore : ISettingsStore
             settings.CommitMessageTemplate = AppSettings.DefaultCommitSubject;
         }
 
+        // 왜: 「받는·올리는 브랜치」가 「작업·업로드 브랜치」로 바뀌었다 — 받는 칸에 일하는 브랜치를 적어 쓰던 PC 의 값을 한 번 옮긴다
+        if (settings.ReceiveBranch is not null || settings.PushBranch is not null)
+        {
+            var receive = settings.ReceiveBranch?.Trim() ?? string.Empty;
+            var push = settings.PushBranch?.Trim() ?? string.Empty;
+            if (receive.Length > 0 && !string.Equals(receive, push, StringComparison.Ordinal))
+            {
+                settings.WorkBranch = receive;
+            }
+
+            if (settings.PushBranch is not null)
+            {
+                settings.UploadBranch = push;
+            }
+
+            settings.ReceiveBranch = null;
+            settings.PushBranch = null;
+        }
+
+        // 함정: 역직렬화가 사전을 새로 만들어 대소문자 무시 비교가 사라진다 — 저장소 Id 는 경로라 다시 씌운다
+        settings.RepoBranches = new Dictionary<string, RepoBranchRule>(settings.RepoBranches, StringComparer.OrdinalIgnoreCase);
+
         if (settings.ScanRoots.Count > 0)
         {
             return settings;

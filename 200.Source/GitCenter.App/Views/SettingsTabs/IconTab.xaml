@@ -1,0 +1,35 @@
+<UserControl x:Class="GitCenter.App.Views.SettingsTabs.IconTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf">
+    <!-- 설정 「아이콘」 탭 — 규격은 JHJ_CS_CORE/300.Docs/030.설정-창-기본-규격.md §4. 계약: 로직이 없는 탭 조각이다 — DataContext(SettingsViewModel)는 SettingsWindow 에서 물려받는다 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+        <StackPanel Margin="0,0,6,0">
+
+            <!-- 계약: 고르는 즉시 창 머리·작업 표시줄·트레이가 함께 바뀐다 — 080.CS앱-화면-공통.md §2 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="아이콘" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"
+                               Text="고르면 바로 창 머리 · 작업 표시줄 · 트레이에 비칩니다. 저장은 아래 「적용」입니다." />
+                    <StackPanel Orientation="Horizontal">
+                        <ComboBox Width="210" ItemsSource="{Binding IconChoices}" SelectedItem="{Binding IconChoice}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="20" Height="20" VerticalAlignment="Center"
+                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                               Source="{Binding Converter={StaticResource IconChoicePreview}}" />
+                                        <TextBlock Text="{Binding Converter={StaticResource IconChoiceLabel}}"
+                                                   Margin="9,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Content="그림 불러오기" Padding="9,4" Margin="12,0,0,0" Command="{Binding ImportIconCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf"
         xmlns:vm="clr-namespace:GitCenter.App.ViewModels"
+        xmlns:tabs="clr-namespace:GitCenter.App.Views.SettingsTabs"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="JHJ Git Center — 설정"
         Width="980" Height="780" MinWidth="860" MinHeight="620"
@@ -43,6 +44,28 @@
                                Text="%LOCALAPPDATA%\JHJ_Git-Center\settings.json 한 파일에 저장됩니다" />
                 </StackPanel>
             </StackPanel>
+            <!-- 「앱 공유하기」 — 030.설정-창-기본-규격.md §1. 계약: 「배포하기」는 개발 장비 + 저장소 소유자 계정일 때만 보인다(Core AppDeploy) -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0">
+                <TextBlock Text="{loc:Tr '앱 공유하기'}" Style="{StaticResource Micro}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <!-- 계약: 셋의 순서와 뜻은 AI 사용량과 같다 — winget 명령 복사 · 설치 파일 주소 복사 · 설치 파일 내려받기(주소는 Core AppLinks) -->
+                <Button x:Name="ShareWingetButton" Style="{StaticResource IconButton}" Click="OnShareWingetClick"
+                        ToolTip="{loc:Tr 'winget 설치 명령 복사 — 터미널에 붙여 넣으면 설치됩니다'}">
+                    <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconTerminal}" />
+                </Button>
+                <Button x:Name="ShareLinkButton" Style="{StaticResource IconButton}" Click="OnShareLinkClick"
+                        ToolTip="{loc:Tr '설치 파일 주소 복사 — 받는 사람은 언제나 최신 설치 파일을 받습니다'}">
+                    <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconLink}" />
+                </Button>
+                <Button x:Name="ShareDownloadButton" Style="{StaticResource IconButton}" Click="OnShareDownloadClick"
+                        ToolTip="{loc:Tr '설치 파일 내려받기 — 브라우저로 최신 설치 파일을 받습니다'}">
+                    <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconDownload}" />
+                </Button>
+                <Button x:Name="ShareDeployButton" Style="{StaticResource IconButton}" Click="OnShareDeployClick" Visibility="Collapsed"
+                        Foreground="{DynamicResource AccentBrush}"
+                        ToolTip="{loc:Tr '배포하기 — 배포 콘솔을 엽니다. 계정과 이 장비가 배포 이력에 남습니다'}">
+                    <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconUpload}" />
+                </Button>
+            </StackPanel>
             <Button Grid.Column="1" Style="{StaticResource CloseCaptionButton}" Click="OnCloseClick"
                     VerticalAlignment="Top" Margin="0,-4,-4,0" ToolTip="{loc:Tr '닫기'}">
                 <Path Style="{StaticResource CaptionIcon}" Data="{StaticResource IconClose}" />
@@ -50,414 +73,14 @@
         </Grid>
 
         <TabControl Grid.Row="1">
-
-            <!-- ① 목록 출처 -->
-            <TabItem Header="목록 출처">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
-                    <StackPanel>
-
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="루트 폴더 스캔" Style="{StaticResource SectionTitle}" />
-                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                           Text="루트 아래를 깊이만큼 훑어 .git 을 찾습니다. 저장소를 찾으면 그 아래로는 내려가지 않습니다." />
-                                <ItemsControl ItemsSource="{Binding Roots}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,0,0,6">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <CheckBox IsChecked="{Binding Enabled}" Margin="0,0,8,0" />
-                                                <TextBox Grid.Column="1" Text="{Binding Path}" />
-                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0">
-                                                    <TextBlock Text="깊이" Style="{StaticResource Caption}" VerticalAlignment="Center"
-                                                               Margin="0,0,5,0" />
-                                                    <TextBox Text="{Binding Depth}" Width="48" />
-                                                </StackPanel>
-                                                <Button Grid.Column="3" Content="빼기" Padding="9,4"
-                                                        Command="{Binding DataContext.RemoveRootCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <Button Content="루트 더하기" Command="{Binding AddRootCommand}" HorizontalAlignment="Left"
-                                        Margin="0,6,0,0" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="GitHub Desktop 연동" Style="{StaticResource SectionTitle}" />
-                                <TextBlock Text="{Binding GitHubDesktopState}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
-                                <CheckBox Content="Desktop 이 들고 있는 저장소 목록을 함께 가져옵니다"
-                                          IsChecked="{Binding Settings.GitHubDesktopEnabled}" Margin="0,8,0,0" />
-                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                           Text="Desktop 은 목록을 IndexedDB 에 눌러 담아 둡니다 — 이 앱이 그 블록을 풀어 경로만 읽고, 실제로 .git 이 있는 것만 목록에 올립니다. Desktop 을 켜 둔 채로도 읽습니다." />
-                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                    <TextBlock Text="자료 폴더(비우면 자동)" Style="{StaticResource Caption}" VerticalAlignment="Center"
-                                               Margin="0,0,8,0" />
-                                    <TextBox Width="420" Text="{Binding Settings.GitHubDesktopDataPath}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="GitHub 계정(gh)" Style="{StaticResource SectionTitle}" />
-                                <CheckBox Content="gh CLI 로 계정·조직 저장소를 함께 가져옵니다"
-                                          IsChecked="{Binding Settings.GitHubAccountEnabled}" />
-                                <CheckBox Content="아직 clone 하지 않은 저장소도 목록에 둡니다" Margin="0,6,0,0"
-                                          IsChecked="{Binding Settings.IncludeUnclonedAccountRepos}" />
-                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                    <TextBox Width="260" Text="{Binding NewOwner, UpdateSourceTrigger=PropertyChanged}"
-                                             ToolTip="계정 또는 조직 이름. 비워 두면 로그인한 본인 저장소입니다" />
-                                    <Button Content="더하기" Command="{Binding AddOwnerCommand}" Margin="6,0,0,0" />
-                                </StackPanel>
-                                <ItemsControl ItemsSource="{Binding Owners}" Margin="0,6,0,0">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                <TextBlock Text="{Binding}" VerticalAlignment="Center" Width="260" />
-                                                <Button Content="빼기" Padding="9,3"
-                                                        Command="{Binding DataContext.RemoveOwnerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="명령 출처" Style="{StaticResource SectionTitle}" />
-                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                           Text="명령이 한 줄에 경로 하나를 내면 그것을 목록으로 읽습니다. 경로가 …\.git 으로 끝나면 그 부모를 씁니다." />
-                                <ItemsControl ItemsSource="{Binding Commands}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,0,0,6">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="150" />
-                                                    <ColumnDefinition Width="140" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <CheckBox IsChecked="{Binding Enabled}" Margin="0,0,8,0" />
-                                                <TextBox Grid.Column="1" Text="{Binding Name}" Margin="0,0,6,0" />
-                                                <TextBox Grid.Column="2" Text="{Binding FileName}" Margin="0,0,6,0" />
-                                                <TextBox Grid.Column="3" Text="{Binding Arguments}" Margin="0,0,6,0" />
-                                                <Button Grid.Column="4" Content="빼기" Padding="9,4"
-                                                        Command="{Binding DataContext.RemoveCommandCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <Button Content="명령 더하기" Command="{Binding AddCommandCommand}" HorizontalAlignment="Left"
-                                        Margin="0,6,0,0" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="수동 추가 · 숨긴 저장소" Style="{StaticResource SectionTitle}" />
-                                <Button Content="저장소 폴더 더하기" Command="{Binding AddManualCommand}" HorizontalAlignment="Left" />
-                                <ItemsControl ItemsSource="{Binding ManualPaths}" Margin="0,8,0,0">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                <TextBlock Text="{Binding}" VerticalAlignment="Center" Width="560"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <Button Content="빼기" Padding="9,3"
-                                                        Command="{Binding DataContext.RemoveManualCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <TextBlock Text="숨긴 저장소" Style="{StaticResource Caption}" Margin="0,10,0,4" />
-                                <ItemsControl ItemsSource="{Binding Excluded}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                <TextBlock Text="{Binding}" VerticalAlignment="Center" Width="560"
-                                                           TextTrimming="CharacterEllipsis" Style="{StaticResource Caption}" />
-                                                <Button Content="되살리기" Padding="9,3"
-                                                        Command="{Binding DataContext.RestoreHiddenCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Border>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <Button Content="지금 한 번 읽어 보기" Command="{Binding TestSourcesCommand}" />
-                            <Button Content="{loc:Tr '기본값으로'}" Command="{Binding ResetSourcesCommand}" Margin="6,0,0,0" />
-                            <TextBlock Text="{Binding TestResult}" Style="{StaticResource Caption}" VerticalAlignment="Center"
-                                       Margin="10,0,0,0" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- ② 동기화 -->
-            <TabItem Header="동기화">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
-                    <StackPanel>
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="스스로 도는 일" Style="{StaticResource SectionTitle}" />
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="230" />
-                                        <ColumnDefinition Width="90" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Text="목록 다시 훑기(분)" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Column="1" Text="{Binding Settings.RescanMinutes}" Margin="0,4" />
-                                    <TextBlock Grid.Column="2" Text="0 이면 수동으로만 합니다" Style="{StaticResource Caption}"
-                                               VerticalAlignment="Center" Margin="10,4,0,4" />
-
-                                    <TextBlock Grid.Row="1" Text="상태 다시 읽기(분)" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.StatusRefreshMinutes}" Margin="0,4" />
-                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="원격에 닿지 않습니다 — 로컬만 읽습니다"
-                                               Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,4,0,4" />
-
-                                    <TextBlock Grid.Row="2" Text="자동 Fetch(분)" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Settings.AutoFetchMinutes}" Margin="0,4" />
-                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="0 이 기본입니다 — 켜면 원격을 주기로 읽습니다"
-                                               Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,4,0,4" />
-                                </Grid>
-                                <CheckBox Content="경로가 사라진 저장소를 같은 이름으로 루트에서 다시 찾아 잇습니다" Margin="0,10,0,0"
-                                          IsChecked="{Binding Settings.AutoRelinkBroken}" />
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- ③ git 동작 -->
-            <TabItem Header="git 동작">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
-                    <StackPanel>
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="실행" Style="{StaticResource SectionTitle}" />
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="230" />
-                                        <ColumnDefinition Width="120" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Text="원격 이름" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Column="1" Text="{Binding Settings.RemoteName}" Margin="0,4" />
-
-                                    <TextBlock Grid.Row="1" Text="동시 실행 수" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.Concurrency}" Margin="0,4" />
-                                    <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Caption}"
-                                               VerticalAlignment="Center" Margin="10,4,0,4" TextWrapping="Wrap"
-                                               Text="1~16. 기본값은 이 PC 코어 수의 절반(2~8)입니다 — 올리면 빨라지지만 같은 원격에 몰립니다" />
-
-                                    <TextBlock Grid.Row="2" Text="한 명령 제한 시간(초)" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Settings.GitTimeoutSeconds}" Margin="0,4" />
-
-                                    <TextBlock Grid.Row="3" Text="커밋 제목 기본값" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
-                                             Text="{Binding Settings.CommitMessageTemplate}" Margin="0,4" />
-
-                                    <TextBlock Grid.Row="4" Text="커밋 메시지(본문) 기본값" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2"
-                                             Text="{Binding Settings.CommitBodyTemplate}" Margin="0,4" />
-
-                                    <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Caption}"
-                                               TextWrapping="Wrap" Margin="0,2,0,4"
-                                               Text="자리표 — {기능} 누른 작업(커밋 · 커밋&amp;올리기) · {그룹} 고른 저장소의 그룹 이름 · {저장소} 고른 저장소 수. 다음 실행부터 아래 글상자에 채워집니다" />
-                                </Grid>
-
-                                <CheckBox Content="Pull 은 빨리감기만 허용합니다(--ff-only)" Margin="0,10,0,0"
-                                          IsChecked="{Binding Settings.FastForwardOnly}" />
-                                <CheckBox Content="Pull 전에 변경을 stash 했다가 끝나고 되돌립니다" Margin="0,6,0,0"
-                                          IsChecked="{Binding Settings.AutoStashBeforePull}" />
-                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0"
-                                           Foreground="{DynamicResource DangerBrush}"
-                                           Text="이 앱은 force push · reset --hard · clean 을 어떤 설정으로도 실행하지 않습니다." />
-                            </StackPanel>
-                        </Border>
-                        <Button Content="{loc:Tr '기본값으로'}" Command="{Binding ResetGitCommand}" HorizontalAlignment="Left" />
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- ④ 화면 -->
-            <TabItem Header="화면">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
-                    <StackPanel Margin="0,0,6,0">
-
-                        <!-- 테마 — 고르는 즉시 화면에 비친다 -->
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="테마" Style="{StaticResource SectionTitle}" />
-                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"
-                                           Text="고르면 바로 화면에 비칩니다. 저장은 아래 「적용」입니다." />
-
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="140" />
-                                        <ColumnDefinition Width="210" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Text="명암" VerticalAlignment="Center" Margin="0,5" />
-                                    <ComboBox Grid.Column="1" ItemsSource="{Binding Themes}"
-                                              SelectedItem="{Binding Theme}" Margin="0,5">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Converter={StaticResource ThemeLabel}}" />
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                    <TextBlock Grid.Column="2" Style="{StaticResource Caption}" VerticalAlignment="Center"
-                                               Margin="12,5,0,5" TextWrapping="Wrap"
-                                               Text="「Windows 설정 따름」이면 작업 표시줄에서 밝게·어둡게를 바꿀 때 이 앱도 따라 바뀝니다." />
-
-                                    <TextBlock Grid.Row="1" Text="색" VerticalAlignment="Center" Margin="0,5" />
-                                    <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Palettes}"
-                                              SelectedItem="{Binding Palette}" Margin="0,5">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Ellipse Width="12" Height="12" VerticalAlignment="Center"
-                                                             Fill="{Binding Converter={StaticResource PaletteSwatch}}" />
-                                                    <TextBlock Text="{Binding Converter={StaticResource PaletteLabel}}"
-                                                               Margin="9,0,0,0" VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                    <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Caption}"
-                                               VerticalAlignment="Center" Margin="12,5,0,5" TextWrapping="Wrap"
-                                               Text="트레이에 함께 상주하는 JHJ 앱과 색으로 갈립니다 — 이 앱의 기본은 보라입니다." />
-
-                                    <TextBlock Grid.Row="2" Text="화면 배율" VerticalAlignment="Center" Margin="0,5" />
-                                    <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Scales}"
-                                              SelectedItem="{Binding UiScale}" Margin="0,5">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Converter={StaticResource ScaleLabel}}" />
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                    <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Caption}"
-                                               VerticalAlignment="Center" Margin="12,5,0,5" TextWrapping="Wrap"
-                                               Text="글자와 여백을 함께 키웁니다. 높은 해상도에서 글자가 작게 보일 때 올립니다." />
-
-                                    <TextBlock Grid.Row="3" Text="언어" VerticalAlignment="Center" Margin="0,5" />
-                                    <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Languages}"
-                                              SelectedItem="{Binding Language}" Margin="0,5">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Converter={StaticResource LanguageLabel}}" />
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-
-                                    <!-- 계약: 고르는 즉시 창 머리·작업 표시줄·트레이가 함께 바뀐다 — 080.CS앱-화면-공통.md §2 -->
-                                    <TextBlock Grid.Row="4" Text="아이콘" VerticalAlignment="Center" Margin="0,5" />
-                                    <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding IconChoices}"
-                                              SelectedItem="{Binding IconChoice}" Margin="0,5">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Image Width="20" Height="20" VerticalAlignment="Center"
-                                                           RenderOptions.BitmapScalingMode="HighQuality"
-                                                           Source="{Binding Converter={StaticResource IconChoicePreview}}" />
-                                                    <TextBlock Text="{Binding Converter={StaticResource IconChoiceLabel}}"
-                                                               Margin="9,0,0,0" VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                    <StackPanel Grid.Row="4" Grid.Column="2" Orientation="Horizontal" Margin="12,5,0,5">
-                                        <Button Content="그림 불러오기" Padding="9,4" Command="{Binding ImportIconCommand}" />
-                                        <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,0,0,0"
-                                                   Text="창 머리 · 작업 표시줄 · 트레이" />
-                                    </StackPanel>
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- 배치 -->
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="배치" Style="{StaticResource SectionTitle}" />
-                                <CheckBox Content="목록을 조밀하게 — 줄 높이를 줄여 한 화면에 더 담습니다"
-                                          IsChecked="{Binding CompactRows}" />
-                                <CheckBox Content="오른쪽 「작업 로그」 단을 보입니다 — 끄면 가운데 상세가 넓어집니다"
-                                          Margin="0,9,0,0" IsChecked="{Binding ShowActivityPanel}" />
-                            </StackPanel>
-                        </Border>
-
-                        <!-- 창·단축키 -->
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="창과 단축키" Style="{StaticResource SectionTitle}" />
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="140" />
-                                        <ColumnDefinition Width="210" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="전역 단축키" VerticalAlignment="Center" Margin="0,5" />
-                                    <TextBox Grid.Column="1" Text="{Binding Settings.Hotkey}" Margin="0,5"
-                                             Tag="Ctrl+Alt+3" />
-                                    <TextBlock Grid.Column="2" Style="{StaticResource Caption}" VerticalAlignment="Center"
-                                               Margin="12,5,0,5" TextWrapping="Wrap"
-                                               Text="예: Ctrl+Alt+3 —창을 닫아도 다시 등록되므로 다시 시작하지 않아도 됩니다." />
-                                </Grid>
-
-                                <CheckBox Content="로그인할 때 자동으로 실행합니다" Margin="0,11,0,0"
-                                          IsChecked="{Binding StartAtLogin}" />
-                                <CheckBox Content="창을 닫으면 트레이로 보냅니다 — 끝내기는 트레이 메뉴에서 합니다"
-                                          Margin="0,9,0,0" IsChecked="{Binding Settings.MinimizeToTray}" />
-                            </StackPanel>
-                        </Border>
-
-                        <Button Content="{loc:Tr '기본값으로'}" Command="{Binding ResetDisplayCommand}"
-                                HorizontalAlignment="Left" />
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+            <!-- 계약: 공통 탭 「일반」·「화면」·「아이콘」이 먼저, 세로 금 뒤에 앱 전용 탭이 온다 — 030.설정-창-기본-규격.md §1 -->
+            <TabItem Header="일반"><tabs:GeneralTab /></TabItem>
+            <TabItem Header="화면"><tabs:DisplayTab /></TabItem>
+            <TabItem Header="아이콘"><tabs:IconTab /></TabItem>
+            <TabItem Style="{StaticResource TabGroupDivider}" />
+            <TabItem Header="목록 출처"><tabs:SourcesTab /></TabItem>
+            <TabItem Header="동기화"><tabs:SyncTab /></TabItem>
+            <TabItem Header="git 동작"><tabs:GitTab /></TabItem>
         </TabControl>
 
         <Border Grid.Row="2" Style="{StaticResource HDivider}" Margin="0,12,0,0" VerticalAlignment="Top" />

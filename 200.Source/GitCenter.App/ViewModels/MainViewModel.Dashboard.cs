@@ -48,7 +48,12 @@ public sealed partial class MainViewModel
 
     private void InitDashboardCharts()
     {
-        CalendarChart.RowCommand = OpenCommitsCommand;
+        // 계약: 저장소·시점이 줄인 카드는 줄의 Tag(repo: · age:)로 「커밋 내역」을 연다 — 캘린더와 같은 명령이 열쇠 머리로 가른다
+        foreach (var card in new[] { CalendarChart, TopChart, LinesChart, AgeChart })
+        {
+            card.RowCommand = OpenCommitsCommand;
+        }
+
         foreach (var card in new[] { StateChart, GroupChart, ChangeChart, TopChart, AgeChart, BranchChart, LinesChart, CalendarChart })
         {
             card.Restore(Settings.DashboardChartKinds.GetValueOrDefault(card.Key),
@@ -94,7 +99,7 @@ public sealed partial class MainViewModel
 
         TopChart.Data = new ChartData(
             [new("스테이지"), new("수정"), new("새 파일"), new("충돌")],
-            [.. read.Select(r => new ChartRow(r.Name, [r.Status!.Staged, r.Status.Unstaged, r.Status.Untracked, r.Status.Conflicted]))
+            [.. read.Select(r => new ChartRow(r.Name, [r.Status!.Staged, r.Status.Unstaged, r.Status.Untracked, r.Status.Conflicted], Tag: RepoTag + r.Id))
                 .Where(row => row.Total > 0).OrderByDescending(row => row.Total).Take(8)],
             Mono: true);
 
@@ -103,11 +108,11 @@ public sealed partial class MainViewModel
         var ages = _all.Where(r => r.LastCommitWhen is not null).Select(r => (now - r.LastCommitWhen!.Value).TotalDays).ToList();
         AgeChart.Data = new ChartData([],
         [
-            new ChartRow("하루 안", ages.Count(d => d < 1)),
-            new ChartRow("7일 안", ages.Count(d => d is >= 1 and < 7)),
-            new ChartRow("30일 안", ages.Count(d => d is >= 7 and < 30)),
-            new ChartRow("90일 안", ages.Count(d => d is >= 30 and < 90)),
-            new ChartRow("그 이전", ages.Count(d => d >= 90))
+            new ChartRow("하루 안", [ages.Count(d => d < 1)], Tag: AgeTag + "0..1"),
+            new ChartRow("7일 안", [ages.Count(d => d is >= 1 and < 7)], Tag: AgeTag + "1..7"),
+            new ChartRow("30일 안", [ages.Count(d => d is >= 7 and < 30)], Tag: AgeTag + "7..30"),
+            new ChartRow("90일 안", [ages.Count(d => d is >= 30 and < 90)], Tag: AgeTag + "30..90"),
+            new ChartRow("그 이전", [ages.Count(d => d >= 90)], Tag: AgeTag + "90..100000")
         ], Mono: true);
 
         // 계약: 범주 색은 여덟뿐이다 — 여덟째 자리부터는 「기타」 한 줄로 접는다
@@ -123,7 +128,7 @@ public sealed partial class MainViewModel
         // 계약: 추가는 녹색·삭제는 적색이다 — diff 단과 같은 뜻 색을 쓴다
         LinesChart.Data = new ChartData(
             [new("추가", "깨끗함"), new("삭제", "충돌")],
-            [.. read.Select(r => new ChartRow(r.Name, [r.Status!.Insertions, r.Status.Deletions]))
+            [.. read.Select(r => new ChartRow(r.Name, [r.Status!.Insertions, r.Status.Deletions], Tag: RepoTag + r.Id))
                 .Where(row => row.Total > 0).OrderByDescending(row => row.Total).Take(8)]);
         var added = read.Sum(r => r.Status!.Insertions);
         var removed = read.Sum(r => r.Status!.Deletions);

@@ -3,3 +3,4 @@ obj/
 .vs/
 *.user
 800.Deploy/publish/
+800.Deploy/winget/

@@ -1,0 +1,160 @@
+﻿<UserControl x:Class="GitCenter.App.Views.SettingsTabs.SourcesTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf">
+    <!-- 설정 「목록 출처」 탭. 계약: 로직이 없는 탭 조각이다 — DataContext(SettingsViewModel)는 SettingsWindow 에서 물려받는다 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+        <StackPanel>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="루트 폴더 스캔" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="루트 아래를 깊이만큼 훑어 .git 을 찾습니다. 저장소를 찾으면 그 아래로는 내려가지 않습니다." />
+                    <ItemsControl ItemsSource="{Binding Roots}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox IsChecked="{Binding Enabled}" Margin="0,0,8,0" />
+                                    <TextBox Grid.Column="1" Text="{Binding Path}" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0">
+                                        <TextBlock Text="깊이" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                                   Margin="0,0,5,0" />
+                                        <TextBox Text="{Binding Depth}" Width="48" />
+                                    </StackPanel>
+                                    <Button Grid.Column="3" Content="빼기" Padding="9,4"
+                                            Command="{Binding DataContext.RemoveRootCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="루트 더하기" Command="{Binding AddRootCommand}" HorizontalAlignment="Left"
+                            Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="GitHub Desktop 연동" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="{Binding GitHubDesktopState}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+                    <CheckBox Content="Desktop 이 들고 있는 저장소 목록을 함께 가져옵니다"
+                              IsChecked="{Binding Settings.GitHubDesktopEnabled}" Margin="0,8,0,0" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Text="Desktop 은 목록을 IndexedDB 에 눌러 담아 둡니다 — 이 앱이 그 블록을 풀어 경로만 읽고, 실제로 .git 이 있는 것만 목록에 올립니다. Desktop 을 켜 둔 채로도 읽습니다." />
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="자료 폴더(비우면 자동)" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                   Margin="0,0,8,0" />
+                        <TextBox Width="420" Text="{Binding Settings.GitHubDesktopDataPath}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="GitHub 계정(gh)" Style="{StaticResource SectionTitle}" />
+                    <CheckBox Content="gh CLI 로 계정·조직 저장소를 함께 가져옵니다"
+                              IsChecked="{Binding Settings.GitHubAccountEnabled}" />
+                    <CheckBox Content="아직 clone 하지 않은 저장소도 목록에 둡니다" Margin="0,6,0,0"
+                              IsChecked="{Binding Settings.IncludeUnclonedAccountRepos}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBox Width="260" Text="{Binding NewOwner, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="계정 또는 조직 이름. 비워 두면 로그인한 본인 저장소입니다" />
+                        <Button Content="더하기" Command="{Binding AddOwnerCommand}" Margin="6,0,0,0" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding Owners}" Margin="0,6,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" Width="260" />
+                                    <Button Content="빼기" Padding="9,3"
+                                            Command="{Binding DataContext.RemoveOwnerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="명령 출처" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="명령이 한 줄에 경로 하나를 내면 그것을 목록으로 읽습니다. 경로가 …\.git 으로 끝나면 그 부모를 씁니다." />
+                    <ItemsControl ItemsSource="{Binding Commands}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="140" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox IsChecked="{Binding Enabled}" Margin="0,0,8,0" />
+                                    <TextBox Grid.Column="1" Text="{Binding Name}" Margin="0,0,6,0" />
+                                    <TextBox Grid.Column="2" Text="{Binding FileName}" Margin="0,0,6,0" />
+                                    <TextBox Grid.Column="3" Text="{Binding Arguments}" Margin="0,0,6,0" />
+                                    <Button Grid.Column="4" Content="빼기" Padding="9,4"
+                                            Command="{Binding DataContext.RemoveCommandCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="명령 더하기" Command="{Binding AddCommandCommand}" HorizontalAlignment="Left"
+                            Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="수동 추가 · 숨긴 저장소" Style="{StaticResource SectionTitle}" />
+                    <Button Content="저장소 폴더 더하기" Command="{Binding AddManualCommand}" HorizontalAlignment="Left" />
+                    <ItemsControl ItemsSource="{Binding ManualPaths}" Margin="0,8,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" Width="560"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <Button Content="빼기" Padding="9,3"
+                                            Command="{Binding DataContext.RemoveManualCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="숨긴 저장소" Style="{StaticResource Caption}" Margin="0,10,0,4" />
+                    <ItemsControl ItemsSource="{Binding Excluded}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" Width="560"
+                                               TextTrimming="CharacterEllipsis" Style="{StaticResource Caption}" />
+                                    <Button Content="되살리기" Padding="9,3"
+                                            Command="{Binding DataContext.RestoreHiddenCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <Button Content="지금 한 번 읽어 보기" Command="{Binding TestSourcesCommand}" />
+                <Button Content="{loc:Tr '기본값으로'}" Command="{Binding ResetSourcesCommand}" Margin="6,0,0,0" />
+                <TextBlock Text="{Binding TestResult}" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                           Margin="10,0,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

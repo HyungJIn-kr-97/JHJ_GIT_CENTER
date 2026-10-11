@@ -31,13 +31,19 @@ public sealed record CommitRow(RepoRow Repo, CommitInfo Commit)
 
 public sealed partial class MainViewModel
 {
+    private const string RepoTag = "repo:";
+    private const string AgeTag = "age:";
+
+    // 계약: 「상태 새로 고침」이 커밋 날을 읽는 기간(log --since=735.days.ago)과 같은 값이다
+    private const int HistoryDays = 735;
+
     public ObservableCollection<CommitRow> HistoryCommits { get; } = [];
 
     [ObservableProperty]
     private string _historyTitle = "커밋 내역";
 
     [ObservableProperty]
-    private string _historyCaption = "대시보드의 커밋 캘린더에서 날(칸·막대)을 누르면 그때의 커밋이 여기에 나옵니다.";
+    private string _historyCaption = "대시보드의 커밋 캘린더(칸·막대)나 저장소 줄을 누르면 그 커밋이 여기에 나옵니다.";
 
     // 함정: 칸을 잇달아 누르면 읽기가 겹친다 — 세대 번호로 늦게 온 쪽을 버린다
     private int _historyGeneration;
@@ -46,7 +52,33 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private async Task OpenCommitsAsync(ChartRow? row)
     {
-        var parts = row?.Tag.Split("..") ?? [];
+        var tag = row?.Tag ?? string.Empty;
+        var today = DateOnly.FromDateTime(DateTime.Now);
+
+        // 계약: 저장소·시점 줄은 캘린더가 읽어 둔 가장 긴 기간(HistoryDays)을 연다 — 그보다 옛 커밋은 나오지 않는다
+        if (tag.StartsWith(RepoTag, StringComparison.Ordinal))
+        {
+            var repo = _all.FirstOrDefault(r => r.Id == tag[RepoTag.Length..]);
+            await OpenRepoHistoryAsync(repo).ConfigureAwait(true);
+            return;
+        }
+
+        if (tag.StartsWith(AgeTag, StringComparison.Ordinal))
+        {
+            var bounds = tag[AgeTag.Length..].Split("..");
+            if (bounds.Length == 2 && double.TryParse(bounds[0], CultureInfo.InvariantCulture, out var min)
+                && double.TryParse(bounds[1], CultureInfo.InvariantCulture, out var max))
+            {
+                var now = DateTimeOffset.Now;
+                var repos = _all.Where(r => r.LastCommitWhen is { } when
+                    && (now - when).TotalDays >= min && (now - when).TotalDays < max).ToList();
+                await LoadHistoryAsync($"마지막 커밋 {row!.Label}", repos, today.AddDays(-HistoryDays), today).ConfigureAwait(true);
+            }
+
+            return;
+        }
+
+        var parts = tag.Split("..");
         if (parts.Length != 2
             || !DateOnly.TryParseExact(parts[0], "yyyy-MM-dd", out var from)
             || !DateOnly.TryParseExact(parts[1], "yyyy-MM-dd", out var to))
@@ -54,15 +86,33 @@ public sealed partial class MainViewModel
             return;
         }
 
-        var generation = ++_historyGeneration;
         var span = from == to ? $"{from:yyyy-MM-dd (ddd)}" : $"{from:yyyy-MM-dd} ~ {to:yyyy-MM-dd}";
+        await LoadHistoryAsync(span, _all.Where(r => r.CommitDays.Any(d => d >= from && d <= to)).ToList(), from, to).ConfigureAwait(true);
+    }
+
+    /// <summary>저장소 하나의 커밋 내역을 연다 — 대시보드 「최근 커밋」 줄과 저장소 카드의 줄이 부른다.</summary>
+    [RelayCommand]
+    private async Task OpenRepoHistoryAsync(RepoRow? repo)
+    {
+        if (repo is null)
+        {
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        await LoadHistoryAsync(repo.Name, [repo], today.AddDays(-HistoryDays), today).ConfigureAwait(true);
+    }
+
+    private async Task LoadHistoryAsync(string span, IReadOnlyList<RepoRow> repos, DateOnly from, DateOnly to)
+    {
+        var generation = ++_historyGeneration;
         HistoryTitle = $"커밋 내역 — {span}";
         HistoryCaption = "읽는 중입니다…";
         HistoryCommits.Clear();
         PageIndex = 2;
 
         var found = new List<CommitRow>();
-        foreach (var repo in _all.Where(r => r.CommitDays.Any(d => d >= from && d <= to)).ToList())
+        foreach (var repo in repos)
         {
             var commits = await _git.ReadCommitsAsync(repo.Entry, from, to, CancellationToken.None).ConfigureAwait(true);
             if (generation != _historyGeneration)

@@ -719,12 +719,16 @@ public sealed class GitService(IGitRunner runner) : IGitService
                     {
                         var commitMessage = step.Message;
                         await PushAsync(repo, options, step, cancellationToken).ConfigureAwait(false);
-                        step.Message = $"{commitMessage} · {step.Message}";
+                        // 왜: 작업 브랜치가 아니라 둘 다 건너뛰면 같은 글이 두 번 붙는다
+                        step.Message = commitMessage == step.Message ? commitMessage : $"{commitMessage} · {step.Message}";
                     }
 
                     break;
                 case BulkOperationKind.AbortOperation:
                     await AbortAsync(repo, step, cancellationToken).ConfigureAwait(false);
+                    break;
+                case BulkOperationKind.SwitchToWorkBranch:
+                    await SwitchToWorkBranchAsync(repo, options, step, cancellationToken).ConfigureAwait(false);
                     break;
             }
         }
@@ -765,15 +769,38 @@ public sealed class GitService(IGitRunner runner) : IGitService
         step.Detail = result.Text;
     }
 
-    /// 계약: 받는 브랜치를 적었으면 그것을, 비웠으면 저장소의 기본 브랜치를 쓴다
-    private async Task<string?> ReceiveBranchAsync(RepoEntry repo, BulkOperationOptions options, CancellationToken ct) =>
-        string.IsNullOrWhiteSpace(options.ReceiveBranch)
-            ? await ReadDefaultBranchAsync(repo, ct).ConfigureAwait(false)
-            : options.ReceiveBranch.Trim();
+    /// 계약: 업로드 브랜치(저장소별 → 공통)를 적었으면 그것을, 비웠으면 저장소의 기본 브랜치를 쓴다
+    private async Task<string?> UploadBranchAsync(RepoEntry repo, BulkOperationOptions options, CancellationToken ct)
+    {
+        var upload = options.UploadBranchFor(repo);
+        return upload.Length == 0 ? await ReadDefaultBranchAsync(repo, ct).ConfigureAwait(false) : upload;
+    }
+
+    /// 계약: 지금 브랜치가 작업 브랜치가 아니면 건너뛴다(true) — 병합·커밋·올리기가 엉뚱한 브랜치에 들어가지 않게 한다
+    // 왜: 작업 브랜치가 그 저장소에 아예 없으면 막지 않는다 — 공통 값을 안 쓰는 저장소는 지금 브랜치로 일하는 것이다
+    private async Task<bool> NotOnWorkBranchAsync(RepoEntry repo, BulkOperationOptions options, string current, BulkStepResult step, CancellationToken ct)
+    {
+        var work = options.WorkBranchFor(repo);
+        if (work.Length == 0 || string.Equals(work, current, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var exists = await _runner.RunAsync(repo.Path,
+            ["show-ref", "--verify", "--quiet", $"refs/heads/{work}"], ct, 20).ConfigureAwait(false);
+        if (!exists.Ok)
+        {
+            return false;
+        }
+
+        step.Outcome = StepOutcome.Skipped;
+        step.Message = $"지금 브랜치가 {current} 입니다 — 작업 브랜치({work})가 아니라 건너뛰었습니다.";
+        return true;
+    }
 
     private async Task UpdateDefaultBranchAsync(RepoEntry repo, BulkOperationOptions options, BulkStepResult step, CancellationToken ct)
     {
-        var defaultBranch = await ReceiveBranchAsync(repo, options, ct).ConfigureAwait(false);
+        var defaultBranch = await UploadBranchAsync(repo, options, ct).ConfigureAwait(false);
         if (defaultBranch is null)
         {
             step.Outcome = StepOutcome.Skipped;
@@ -806,13 +833,17 @@ public sealed class GitService(IGitRunner runner) : IGitService
         step.Outcome = StepOutcome.Failed;
         step.Message = result.Text.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
             ? $"{defaultBranch} 가 갈라져 빨리감기로 갱신할 수 없습니다."
-            : FirstLine(result.Text);
+            : result.Text.Contains("couldn't find remote ref", StringComparison.OrdinalIgnoreCase)
+                ? $"원격에 {defaultBranch} 브랜치가 없습니다 — 이 저장소의 업로드 브랜치를 따로 고르거나 비우면 기본 브랜치를 씁니다."
+                : FirstLine(result.Text);
         step.Detail = result.Text;
     }
 
     private async Task MergeDefaultIntoCurrentAsync(RepoEntry repo, BulkOperationOptions options, BulkStepResult step, CancellationToken ct)
     {
-        var defaultBranch = await ReceiveBranchAsync(repo, options, ct).ConfigureAwait(false);
+        // 계약: 병합해 올 브랜치를 골랐으면 그것을, 안 골랐으면 이 저장소의 업로드 브랜치를 가져온다
+        var picked = options.MergeSource.Trim();
+        var defaultBranch = picked.Length > 0 ? picked : await UploadBranchAsync(repo, options, ct).ConfigureAwait(false);
         if (defaultBranch is null)
         {
             step.Outcome = StepOutcome.Skipped;
@@ -828,11 +859,20 @@ public sealed class GitService(IGitRunner runner) : IGitService
             return;
         }
 
+        if (await NotOnWorkBranchAsync(repo, options, current, step, ct).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        // 왜: 단추 하나로 원격의 최신을 받아 합친다 — 받기가 실패해도(원격에 없는 로컬 브랜치) 이미 아는 ref 로 병합을 이어 간다
+        await _runner.RunAsync(repo.Path,
+            ["fetch", options.RemoteName, defaultBranch], ct, options.TimeoutSeconds).ConfigureAwait(false);
+
         var reference = await ResolveDefaultRefAsync(repo, defaultBranch, ct).ConfigureAwait(false);
         if (reference is null)
         {
             step.Outcome = StepOutcome.Skipped;
-            step.Message = $"{defaultBranch} 를 찾지 못했습니다 — 먼저 Fetch 해 주십시오.";
+            step.Message = $"{defaultBranch} 브랜치가 이 저장소에 없어 병합하지 않았습니다.";
             return;
         }
 
@@ -1014,6 +1054,12 @@ public sealed class GitService(IGitRunner runner) : IGitService
             return;
         }
 
+        var current = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
+        if (await NotOnWorkBranchAsync(repo, options, current, step, ct).ConfigureAwait(false))
+        {
+            return;
+        }
+
         var message = string.IsNullOrWhiteSpace(options.CommitMessage) ? "JHJ Git Center 일괄 처리" : options.CommitMessage;
 
         // 계약: -m 을 두 번 주면 git 이 둘째를 빈 줄 뒤의 본문으로 붙인다
@@ -1063,12 +1109,30 @@ public sealed class GitService(IGitRunner runner) : IGitService
             return;
         }
 
+        if (await NotOnWorkBranchAsync(repo, options, branch, step, ct).ConfigureAwait(false))
+        {
+            return;
+        }
+
         var upstream = await _runner.RunAsync(repo.Path,
             ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], ct, 20).ConfigureAwait(false);
 
         // 계약: 올리는 브랜치가 지금 브랜치와 다르면 그 원격 브랜치로 올린다 — upstream 은 바꾸지 않고, 빨리감기가 안 되면 git 이 거부한다
-        var target = options.PushBranch.Trim();
+        var target = options.UploadBranchFor(repo);
         var elsewhere = target.Length > 0 && !string.Equals(target, branch, StringComparison.Ordinal);
+
+        if (elsewhere)
+        {
+            // 왜: 원격에 없는 이름으로 올리면 새 원격 브랜치가 조용히 생긴다 — master 저장소에 origin/main 이 만들어졌다
+            var known = await _runner.RunAsync(repo.Path,
+                ["show-ref", "--verify", "--quiet", $"refs/remotes/{options.RemoteName}/{target}"], ct, 20).ConfigureAwait(false);
+            if (!known.Ok)
+            {
+                step.Outcome = StepOutcome.Skipped;
+                step.Message = $"{options.RemoteName} 에 {target} 브랜치가 없어 올리지 않았습니다 — 이 저장소의 업로드 브랜치를 따로 고르거나 Fetch 뒤 다시 해 주십시오.";
+                return;
+            }
+        }
 
         var args = elsewhere
             ? new List<string> { "push", options.RemoteName, $"HEAD:refs/heads/{target}" }
@@ -1091,10 +1155,72 @@ public sealed class GitService(IGitRunner runner) : IGitService
             return;
         }
 
+        // 왜: 원격이 없는 로컬 전용 저장소는 실패가 아니다 — 일괄 올리기의 「실패 1」로 세지 않는다
+        if (result.Text.Contains("does not appear to be a git repository", StringComparison.OrdinalIgnoreCase))
+        {
+            step.Outcome = StepOutcome.Skipped;
+            step.Message = $"원격({options.RemoteName})이 없어 올리지 않았습니다.";
+            step.Detail = result.Text;
+            return;
+        }
+
         step.Outcome = StepOutcome.Failed;
         // 계약: 거부당하면 force 를 권하지 않는다 — 먼저 받아서 합치라고 적는다
         step.Message = result.Text.Contains("rejected", StringComparison.OrdinalIgnoreCase)
             ? "거부됐습니다 — 원격이 앞서 있습니다. 먼저 받아서 합쳐 주십시오."
+            : FirstLine(result.Text);
+        step.Detail = result.Text;
+    }
+
+    /// 계약: 있는 브랜치로만 옮긴다 — 로컬에 없으면 원격의 같은 이름을 추적하는 브랜치를 만들고, 둘 다 없으면 건너뛴다
+    // 계약: 강제 옵션을 쓰지 않는다 — 덮어쓸 변경이 있거나 병합 중이면 git 이 거부하고 작업 트리는 그대로 남는다
+    private async Task SwitchToWorkBranchAsync(RepoEntry repo, BulkOperationOptions options, BulkStepResult step, CancellationToken ct)
+    {
+        var work = options.WorkBranchFor(repo);
+        if (work.Length == 0)
+        {
+            step.Outcome = StepOutcome.Skipped;
+            step.Message = "작업 브랜치를 정하지 않았습니다.";
+            return;
+        }
+
+        var current = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
+        if (string.Equals(current, work, StringComparison.Ordinal))
+        {
+            step.Outcome = StepOutcome.Skipped;
+            step.Message = $"이미 {work} 입니다.";
+            return;
+        }
+
+        var local = await _runner.RunAsync(repo.Path,
+            ["show-ref", "--verify", "--quiet", $"refs/heads/{work}"], ct, 20).ConfigureAwait(false);
+        var remote = local.Ok
+            ? local
+            : await _runner.RunAsync(repo.Path,
+                ["show-ref", "--verify", "--quiet", $"refs/remotes/{options.RemoteName}/{work}"], ct, 20).ConfigureAwait(false);
+
+        if (!local.Ok && !remote.Ok)
+        {
+            step.Outcome = StepOutcome.Skipped;
+            step.Message = $"{work} 브랜치가 이 저장소에 없어 그대로 두었습니다.";
+            return;
+        }
+
+        var result = await _runner.RunAsync(repo.Path,
+            local.Ok ? ["switch", work] : ["switch", "--track", "-c", work, $"{options.RemoteName}/{work}"],
+            ct, options.TimeoutSeconds).ConfigureAwait(false);
+
+        if (result.Ok)
+        {
+            step.Outcome = StepOutcome.Success;
+            step.Message = $"{current} → {work} 로 옮겼습니다.";
+            step.Detail = result.Text;
+            return;
+        }
+
+        step.Outcome = StepOutcome.Failed;
+        step.Message = result.Text.Contains("would be overwritten", StringComparison.OrdinalIgnoreCase)
+            ? $"변경한 파일이 {work} 와 겹쳐 옮기지 못했습니다 — 먼저 커밋해 주십시오."
             : FirstLine(result.Text);
         step.Detail = result.Text;
     }
@@ -1152,6 +1278,117 @@ public sealed class GitService(IGitRunner runner) : IGitService
 
         var local = await _runner.RunAsync(repo.Path, ["rev-parse", "--verify", "--quiet", defaultBranch], ct, 20).ConfigureAwait(false);
         return local.Ok && local.StdOut.Trim().Length > 0 ? defaultBranch : null;
+    }
+
+    public async Task<RepoAudit> ReadAuditAsync(RepoEntry repo, CancellationToken cancellationToken)
+    {
+        // 계약: 한 번에 읽는다 — 줄은 「키 값」이고 같은 키가 여러 층(전역·저장소)에 있으면 뒤에 온 것이 이긴다
+        var config = await _runner.RunAsync(repo.Path,
+            ["config", "--get-regexp", @"^(user\.name|user\.email|core\.autocrlf|remote\.origin\.url)$"], cancellationToken, 20).ConfigureAwait(false);
+
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in config.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var cut = line.IndexOf(' ');
+            values[cut < 0 ? line.Trim() : line[..cut]] = cut < 0 ? string.Empty : line[(cut + 1)..].Trim();
+        }
+
+        var gitDir = await ResolveGitDirAsync(repo, cancellationToken).ConfigureAwait(false);
+        var exclude = gitDir is null ? null : Path.Combine(gitDir, "info", "exclude");
+        var fetchHead = gitDir is null ? null : Path.Combine(gitDir, "FETCH_HEAD");
+
+        return new RepoAudit
+        {
+            UserName = values.GetValueOrDefault("user.name", string.Empty),
+            UserEmail = values.GetValueOrDefault("user.email", string.Empty),
+            RemoteUrl = values.GetValueOrDefault("remote.origin.url"),
+            AutoCrlf = values.GetValueOrDefault("core.autocrlf", string.Empty),
+            HasGitignore = File.Exists(Path.Combine(repo.Path, ".gitignore")),
+            ExcludeLines = exclude is not null && File.Exists(exclude)
+                ? File.ReadLines(exclude).Count(l => l.Trim().Length > 0 && !l.TrimStart().StartsWith('#'))
+                : 0,
+            LastFetch = fetchHead is not null && File.Exists(fetchHead) ? File.GetLastWriteTime(fetchHead) : null
+        };
+    }
+
+    public async Task<string?> WriteAuthorAsync(RepoEntry repo, string name, string email, CancellationToken cancellationToken)
+    {
+        foreach (var (key, value) in new[] { ("user.name", name), ("user.email", email) })
+        {
+            var result = await _runner.RunAsync(repo.Path, ["config", "--local", key, value], cancellationToken, 20).ConfigureAwait(false);
+            if (!result.Ok)
+            {
+                return FirstLine(result.Text);
+            }
+        }
+
+        return null;
+    }
+
+    // 왜: 작업 트리(worktree)는 info/exclude 가 공통 .git 에 있다 — 경로를 git 에 물어야 맞는 파일을 잡는다
+    private async Task<string?> ExcludePathAsync(RepoEntry repo, CancellationToken ct)
+    {
+        var result = await _runner.RunAsync(repo.Path, ["rev-parse", "--git-path", "info/exclude"], ct, 20).ConfigureAwait(false);
+        return result.Ok && result.StdOut.Trim().Length > 0 ? Path.GetFullPath(Path.Combine(repo.Path, result.StdOut.Trim())) : null;
+    }
+
+    private static bool IsExcludeRule(string line) => line.Trim().Length > 0 && !line.TrimStart().StartsWith('#');
+
+    public async Task<IReadOnlyList<string>> ReadExcludeAsync(RepoEntry repo, CancellationToken cancellationToken)
+    {
+        var path = await ExcludePathAsync(repo, cancellationToken).ConfigureAwait(false);
+        return path is not null && File.Exists(path)
+            ? [.. (await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false)).Where(IsExcludeRule).Select(l => l.Trim())]
+            : [];
+    }
+
+    public async Task<string?> AppendExcludeAsync(RepoEntry repo, IReadOnlyList<string> lines, CancellationToken cancellationToken)
+    {
+        var path = await ExcludePathAsync(repo, cancellationToken).ConfigureAwait(false);
+        return path is null
+            ? "exclude 파일의 자리를 찾지 못했습니다."
+            : await AppendRulesAsync(path, lines, cancellationToken).ConfigureAwait(false);
+    }
+
+    // 계약: 작업 트리 맨 위의 .gitignore 하나만 다룬다 — 하위 폴더의 .gitignore 는 읽지도 쓰지도 않는다
+    private static string GitignorePath(RepoEntry repo) => Path.Combine(repo.Path, ".gitignore");
+
+    public async Task<IReadOnlyList<string>> ReadGitignoreAsync(RepoEntry repo, CancellationToken cancellationToken)
+    {
+        var path = GitignorePath(repo);
+        return File.Exists(path)
+            ? [.. (await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false)).Where(IsExcludeRule).Select(l => l.Trim())]
+            : [];
+    }
+
+    public Task<string?> AppendGitignoreAsync(RepoEntry repo, IReadOnlyList<string> lines, CancellationToken cancellationToken) =>
+        AppendRulesAsync(GitignorePath(repo), lines, cancellationToken);
+
+    private static async Task<string?> AppendRulesAsync(string path, IReadOnlyList<string> lines, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var existing = File.Exists(path) ? await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false) : string.Empty;
+            var have = existing.Split('\n').Where(IsExcludeRule).Select(l => l.Trim()).ToHashSet(StringComparer.Ordinal);
+            var missing = lines.Select(l => l.Trim()).Where(l => IsExcludeRule(l) && have.Add(l)).ToList();
+            if (missing.Count == 0)
+            {
+                return null;
+            }
+
+            // 왜: CRLF 로 적힌 파일에 LF 를 섞으면 .gitignore 가 줄바꿈 혼합으로 통째 변경처럼 보인다 — 있던 줄바꿈을 따른다
+            var eol = existing.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+
+            // 함정: 마지막 줄이 줄바꿈 없이 끝나 있으면 그대로 붙였을 때 앞 규칙과 한 줄로 합쳐진다
+            var lead = existing.Length > 0 && !existing.EndsWith('\n') ? eol : string.Empty;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.AppendAllTextAsync(path, lead + string.Join(eol, missing) + eol, new System.Text.UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ex.Message;
+        }
     }
 
     private async Task<string?> ResolveGitDirAsync(RepoEntry repo, CancellationToken ct)

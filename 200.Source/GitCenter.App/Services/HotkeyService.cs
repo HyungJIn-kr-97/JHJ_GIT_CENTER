@@ -7,7 +7,7 @@ using CoreHotkeys = Jhj.Core.Wpf.Hotkeys.HotkeyService;
 namespace GitCenter.App.Services;
 
 /// <summary>
-/// 전역 단축키 하나 — 어느 창에서든 Git 센터를 띄운다.
+/// 전역 단축키(넷까지) — 어느 창에서든 Git 센터를 띄운다.
 /// 계약: 해석·등록·규칙 검사는 JHJ_CS_CORE 가 한다 — 여기는 **이 앱의 설정 한 칸과 실패 문구**만 갖는다.
 /// 계약: 자리표는 JHJ_DEV/000.AGENTS_MD/060.단축키/060.단축키-대장.md 다 — Git Center 는 3번(Ctrl+Alt+3)이다.
 /// 함정: 읽을 수 없는 값을 Core 에 그대로 넘기면 Core 가 제 기본값으로 등록해 버린다 — 그래서 **여기서 먼저 걸러**
@@ -39,7 +39,8 @@ public sealed class HotkeyService(AppSettings settings, TrayHost tray) : IDispos
         }
 
         LastError = null;
-        _inner = new CoreHotkeys([settings.Hotkey], onPressed: tray.ShowWindow, warn: OnWarn);
+        // 계약: 추가 칸의 잘못된 값은 Core 가 버린다 — 여기서는 1번 칸만 먼저 거른다
+        _inner = new CoreHotkeys([settings.Hotkey, .. settings.ExtraHotkeys], onPressed: tray.ShowWindow, warn: OnWarn);
     }
 
     public void Unregister()

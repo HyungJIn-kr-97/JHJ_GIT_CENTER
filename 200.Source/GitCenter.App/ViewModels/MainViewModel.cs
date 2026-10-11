@@ -51,10 +51,10 @@ public sealed partial class MainViewModel : ObservableObject
         Settings = settings;
         CommitMessage = settings.CommitMessageTemplate;
         CommitBody = settings.CommitBodyTemplate;
-        ReceiveBranch = settings.ReceiveBranch;
-        PushBranch = settings.PushBranch;
+        InitBranchOptions();
         PageIndex = Math.Clamp(settings.StartPage, 0, 1);
         SortMode = settings.RepoSort is "state" or "recent" ? settings.RepoSort : "name";
+        ExcludeText = string.Join('\n', settings.CommonExcludes);
         InitDashboardCharts();
 
         // 계약: 목록은 RepoRow.GroupNode 객체로 묶인다 — 그룹 머리가 그 객체(접힘·건수)를 그대로 그린다
@@ -113,7 +113,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private int _pageIndex;
 
-    // 계약: 다시 열 때 되살리는 화면은 0·1 뿐이다 — 「커밋 내역」(2)은 누른 것이 있어야 뜻이 있다
+    // 계약: 다시 열 때 되살리는 화면은 0·1 뿐이다 — 「커밋 내역」(2)·「점검」(3)은 누른 것이 있어야 뜻이 있다
     partial void OnPageIndexChanged(int value)
     {
         if (value <= 1)
@@ -292,31 +292,6 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _commitBody = string.Empty;
 
-    /// 계약: 하단에서 고치는 즉시 설정에 남는다 — 비우면 받기는 기본 브랜치, 올리기는 지금 브랜치다
-    [ObservableProperty]
-    private string _receiveBranch = string.Empty;
-
-    [ObservableProperty]
-    private string _pushBranch = string.Empty;
-
-    partial void OnReceiveBranchChanged(string value)
-    {
-        if (Settings.ReceiveBranch != value.Trim())
-        {
-            Settings.ReceiveBranch = value.Trim();
-            _ = SaveSettingsAsync();
-        }
-    }
-
-    partial void OnPushBranchChanged(string value)
-    {
-        if (Settings.PushBranch != value.Trim())
-        {
-            Settings.PushBranch = value.Trim();
-            _ = SaveSettingsAsync();
-        }
-    }
-
     /// 함정: 중괄호가 든 글은 XAML 마크업 확장 안에 못 적는다 — 말풍선 문구를 여기서 건넨다
     public string CommitTokenHint => "자리표 — {기능} 누른 작업 · {그룹} 고른 저장소의 그룹 · {저장소} 고른 저장소 수";
 
@@ -459,18 +434,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        foreach (var row in targets)
-        {
-            Settings.AssignGroup(row.Id, group);
-            row.UserGroup = string.IsNullOrWhiteSpace(group) ? null : group.Trim();
-        }
-
-        var where = string.IsNullOrWhiteSpace(group) ? "그룹 없음" : group.Trim();
-        AddActivity("그룹", StepOutcome.Success, $"저장소 {targets.Count}개를 「{where}」(으)로 옮겼습니다.");
-
-        RefreshGroupChips();
-        ApplyFilter();
-        await SaveSettingsAsync().ConfigureAwait(true);
+        await MoveRowsToGroupAsync(targets, group).ConfigureAwait(true);
     }
 
     /// <summary>적어 넣은 이름으로 새 그룹을 만들고 고른 저장소를 거기에 넣는다.</summary>
@@ -693,7 +657,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         else
         {
-            Changes.Clear();
+            SetChanges([]);
             Branches.Clear();
             Conflicts.Clear();
             SelectedChange = null;
@@ -703,6 +667,8 @@ public sealed partial class MainViewModel : ObservableObject
     private void ApplyFilter()
     {
         var text = FilterText.Trim();
+
+        SyncBranchRules();
 
         // 계약: Rows 에 넣기 전에 줄마다 GroupNode 를 채운다 — 목록이 그 객체로 묶는다
         foreach (var row in _all)
@@ -906,7 +872,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         // 계약: 저장소가 바뀌면 보던 diff 는 더 이상 그 저장소 것이 아니다 — 먼저 비운다
         SelectedChange = null;
-        Changes.Clear();
+        SetChanges([]);
         Branches.Clear();
         Conflicts.Clear();
 
@@ -925,14 +891,9 @@ public sealed partial class MainViewModel : ObservableObject
                 return;
             }
 
-            Changes.Clear();
+            SetChanges(changes);
             Branches.Clear();
             Conflicts.Clear();
-
-            foreach (var change in changes)
-            {
-                Changes.Add(change);
-            }
 
             foreach (var branch in branches)
             {
@@ -1060,6 +1021,9 @@ public sealed partial class MainViewModel : ObservableObject
     private Task AbortAsync() => RunBulkAsync(BulkOperationKind.AbortOperation);
 
     [RelayCommand]
+    private Task SwitchToWorkAsync() => RunBulkAsync(BulkOperationKind.SwitchToWorkBranch);
+
+    [RelayCommand]
     private void Cancel() => _work?.Cancel();
 
     /// 계약: 작업 로그는 화면에만 쌓인다 — 지워도 파일 로그(logs\)는 그대로 남는다
@@ -1088,7 +1052,10 @@ public sealed partial class MainViewModel : ObservableObject
 
         _work = new CancellationTokenSource();
         IsBusy = true;
-        BusyText = $"{Describe(kind)} — 저장소 {targets.Count}개";
+        var mergeSource = kind is BulkOperationKind.MergeDefaultIntoCurrent ? MergeSource?.Trim() ?? string.Empty : string.Empty;
+        BusyText = mergeSource.Length > 0
+            ? $"{Describe(kind)}({mergeSource}) — 저장소 {targets.Count}개"
+            : $"{Describe(kind)} — 저장소 {targets.Count}개";
         ProgressTotal = targets.Count;
         ProgressDone = 0;
 
@@ -1106,8 +1073,10 @@ public sealed partial class MainViewModel : ObservableObject
             FastForwardOnly = Settings.FastForwardOnly,
             AutoStash = Settings.AutoStashBeforePull,
             RemoteName = Settings.RemoteName,
-            ReceiveBranch = ReceiveBranch.Trim(),
-            PushBranch = PushBranch.Trim(),
+            WorkBranch = Settings.WorkBranch,
+            UploadBranch = Settings.UploadBranch,
+            RepoBranches = new Dictionary<string, RepoBranchRule>(Settings.RepoBranches, StringComparer.OrdinalIgnoreCase),
+            MergeSource = mergeSource,
             TimeoutSeconds = Settings.GitTimeoutSeconds
         };
 
@@ -1324,8 +1293,9 @@ public sealed partial class MainViewModel : ObservableObject
     public static string Describe(BulkOperationKind kind) => kind switch
     {
         BulkOperationKind.Fetch => "Fetch",
-        BulkOperationKind.UpdateDefaultBranch => "main 받기",
-        BulkOperationKind.MergeDefaultIntoCurrent => "현재로 병합",
+        BulkOperationKind.SwitchToWorkBranch => "작업 브랜치로 전환",
+        BulkOperationKind.UpdateDefaultBranch => "업로드 브랜치 받기",
+        BulkOperationKind.MergeDefaultIntoCurrent => "지금 브랜치로 병합",
         BulkOperationKind.PullCurrent => "현재 브랜치 Pull",
         BulkOperationKind.UpdateAllTrackedBranches => "모든 추적 브랜치 갱신",
         BulkOperationKind.CommitAll => "커밋",

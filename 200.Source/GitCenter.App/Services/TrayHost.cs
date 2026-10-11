@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using GitCenter.App.Views;
+using GitCenter.Application.Settings;
 using Jhj.Core.Wpf.Shell;
 using Jhj.Core.Wpf.Tray;
 using Serilog;
@@ -16,11 +17,13 @@ namespace GitCenter.App.Services;
 public sealed class TrayHost : IDisposable
 {
     private readonly MainWindow _window;
+    private readonly AppSettings _settings;
     private TrayShell? _shell;
 
-    public TrayHost(MainWindow window)
+    public TrayHost(MainWindow window, AppSettings settings)
     {
         _window = window;
+        _settings = settings;
         _window.CloseRequested += OnCloseRequested;
     }
 
@@ -30,8 +33,10 @@ public sealed class TrayHost : IDisposable
             _window,
             iconFactory: AppIcon.ForTray,
             menuFactory: BuildMenu,
-            pinToTaskbar: true,
+            pinToTaskbar: _settings.PinTrayIcon,
             anchorToTaskbar: false);
+
+        _shell.Showing += OnShowing;
 
         // 계약: 설정에서 아이콘을 바꾸면 트레이도 같이 바뀐다 — 창 머리·작업 표시줄은 AppIcon.Bind 가 맡는다
         AppIcon.Changed += OnIconChanged;
@@ -39,7 +44,19 @@ public sealed class TrayHost : IDisposable
 
     private void OnIconChanged() => _window.Dispatcher.BeginInvoke(() => _shell?.RefreshIcon());
 
+    // 계약: 설정 「열 때마다 새로고침」 — 로컬 상태만 다시 읽는다(원격에 닿는 일은 단추를 눌렀을 때만이다)
+    private void OnShowing()
+    {
+        if (_settings.RefreshOnOpen)
+        {
+            _ = _window.ViewModel.RefreshStatusAsync();
+        }
+    }
+
     public void ShowWindow() => _shell?.Show();
+
+    /// <summary>설정 「작업 표시줄에 아이콘 항상 표시」 — 「적용」에서 부른다.</summary>
+    public void SetPinned(bool pinned) => _shell?.SetPinned(pinned);
 
     public void ShowBalloon(string title, string message) => _shell?.ShowBalloon(title, message);
 

@@ -11,6 +11,8 @@ using GitCenter.Infrastructure.Git;
 using GitCenter.Infrastructure.Settings;
 using GitCenter.Infrastructure.Sources;
 using Jhj.Core.App;
+using Jhj.Core.Updates;
+using Jhj.Core.Windows.Install;
 using Jhj.Core.Wpf.Boot;
 using Jhj.Core.Wpf.Localization;
 using Jhj.Core.Wpf.Shell;
@@ -27,6 +29,8 @@ public partial class App : System.Windows.Application
     private IHost? _host;
     private SingleInstance? _singleInstance;
     private TrayHost? _tray;
+    private GithubUpdateService? _updates;
+    private UpdateOptions? _updateOptions;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -41,6 +45,10 @@ public partial class App : System.Windows.Application
             Name = "JHJ_Git-Center",
             DisplayName = "JHJ Git 통합 관리 센터",
             DefaultPalette = JhjPalettes.Violet,
+            // 계약: 공개 저장소 좌표 — 「이슈 열기」·링크 주소(AppLinks)가 여기서 나온다
+            Repository = AppUpdate.Repository,
+            SetupAssetName = AppUpdate.SetupAssetName,
+            WingetId = AppUpdate.WingetId,
         });
 
         // 계약: 명암이 "system" 인 동안 Windows 의 밝게/어둡게 전환을 따라간다
@@ -49,7 +57,16 @@ public partial class App : System.Windows.Application
         JhjBoot.BootstrapLogger();
         RegisterExceptionHandlers();
 
+        // 계약: Core 화면 부품(UpdatePanel)의 문구 — 빠지면 그 구역만 영어로 나온다
+        Loc.Register(CoreStrings.Catalog);
         Loc.Register(LocStrings.Catalog);
+
+        // 계약: 자가 업데이트는 설치본(%LOCALAPPDATA%\JHJ_Git-Center\app)에서만 돈다 — 받은 exe 를 처음 띄우면 설치할지 묻는다
+        if (SelfInstaller.TryInstallAndRelaunch(ConfirmInstall, WarnInstallFailed))
+        {
+            Shutdown(0);
+            return;
+        }
 
         // ⑦ 이미 떠 있으면 그쪽 창을 띄우고 조용히 사라진다 — 아무 반응이 없으면 고장으로 보인다
         if (JhjBoot.TryHandOffToRunningInstance(out _singleInstance))
@@ -72,8 +89,30 @@ public partial class App : System.Windows.Application
     {
         try
         {
+            _updateOptions = AppUpdate.FromConfiguration(BuildStartupConfiguration());
+            _updates = new GithubUpdateService(_updateOptions);
             var settingsStore = new JsonSettingsStore();
-            var settings = await settingsStore.LoadAsync(CancellationToken.None).ConfigureAwait(false);
+
+            // 왜: 설정을 못 읽는 결함도 업데이트로 고칠 수 있어야 한다 — 읽기에 실패하면 자동 업데이트를 켠 것으로 보고 적용부터 한다
+            AppSettings? earlySettings = null;
+            try
+            {
+                earlySettings = await settingsStore.LoadAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "업데이트 적용 전 설정 읽기 실패");
+            }
+
+            if ((earlySettings?.AutoUpdateEnabled ?? true)
+                && await _updates.TryApplyPendingUpdateAsync(CancellationToken.None).ConfigureAwait(false))
+            {
+                Log.Information("받아 둔 업데이트를 적용하려고 끝냅니다");
+                await Dispatcher.InvokeAsync(() => Shutdown(0));
+                return;
+            }
+
+            var settings = earlySettings ?? await settingsStore.LoadAsync(CancellationToken.None).ConfigureAwait(false);
 
             await Dispatcher.InvokeAsync(() =>
             {
@@ -94,6 +133,14 @@ public partial class App : System.Windows.Application
                 _tray.Start();
                 _host.Services.GetRequiredService<HotkeyService>().Register();
 
+                // 왜: 예약 업데이트 타이머가 SettingsViewModel.Update 안에 있다 — 설정 창을 열기 전에도 돌게 지금 만든다
+                var settingsViewModel = _host.Services.GetRequiredService<SettingsViewModel>();
+                settingsViewModel.Notify = _tray.ShowBalloon;
+                settingsViewModel.PinTray = _tray.SetPinned;
+
+                Jhj.Core.Diagnostics.DiagnosticsLog.Enabled = settings.DiagnosticsEnabled;
+                Jhj.Core.Diagnostics.DiagnosticsLog.Record("app", "started v" + AppVersion.Text);
+
                 window.Show();
 
                 var main = _host.Services.GetRequiredService<MainViewModel>();
@@ -101,6 +148,11 @@ public partial class App : System.Windows.Application
 
                 JhjBoot.LogFireAndForget(StartListenerAsync(), "SingleInstanceListener");
             });
+
+            if (settings.AutoUpdateEnabled)
+            {
+                JhjBoot.LogFireAndForget(CheckForUpdateAsync(), "UpdateCheck");
+            }
         }
         catch (Exception ex)
         {
@@ -113,6 +165,39 @@ public partial class App : System.Windows.Application
             Shutdown(1);
         }
     }
+
+    // 계약: 호스트보다 먼저 읽는다 — 업데이트 적용은 호스트·창을 만들기 전에 끝나야 한다
+    private static IConfiguration BuildStartupConfiguration() =>
+        new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: true)
+            .Build();
+
+    // 계약: 새 버전을 받아 두기만 한다 — 교체는 다음 실행 때 TryApplyPendingUpdateAsync 가 한다
+    private async Task CheckForUpdateAsync()
+    {
+        if (_updates is not { } updates)
+        {
+            return;
+        }
+
+        // 왜: 멈춘 내려받기가 확인 잠금을 끝없이 쥐지 않게 시간을 끊는다
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var result = await Task.Run(() => updates.CheckAndStageUpdateAsync(cts.Token)).ConfigureAwait(false);
+        Log.Information("업데이트 확인: {Result}", result);
+    }
+
+    // 계약: 묻고 알리는 것은 앱 몫이다 — Core 의 SelfInstaller 는 WPF 를 모른다
+    private static bool ConfirmInstall(string installDir) =>
+        Environment.GetCommandLineArgs().Contains(AppUpdate.SilentInstallArg, StringComparer.OrdinalIgnoreCase) ||
+        System.Windows.MessageBox.Show(
+            $"{Loc.T("이 PC 에 설치하고 실행할까요?")}\n\n{installDir}\n\n{Loc.T("「아니요」를 고르면 설치하지 않고 이 자리에서 실행합니다.")}",
+            "JHJ Git Center",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+    private static void WarnInstallFailed(string message) =>
+        System.Windows.MessageBox.Show(message, "JHJ Git Center", MessageBoxButton.OK, MessageBoxImage.Warning);
 
     private void BuildHost(ISettingsStore settingsStore, AppSettings settings)
     {
@@ -130,6 +215,7 @@ public partial class App : System.Windows.Application
             {
                 services.AddSingleton(settingsStore);
                 services.AddSingleton(settings);
+                services.AddSingleton(_updateOptions!);
                 services.AddSingleton<IClock, SystemClock>();
 
                 services.AddSingleton<IGitRunner, GitRunner>();

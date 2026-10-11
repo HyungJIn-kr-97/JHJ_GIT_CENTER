@@ -6,10 +6,10 @@ public enum BulkOperationKind
     /// 원격만 읽는다 — 작업 트리를 건드리지 않아 언제나 안전하다
     Fetch,
 
-    /// 기본 브랜치(main)를 원격에서 받아 로컬 기본 브랜치까지 갱신한다. 체크아웃은 바꾸지 않는다
+    /// 업로드 브랜치(비면 기본 브랜치)를 원격에서 받아 로컬의 같은 브랜치까지 갱신한다. 체크아웃은 바꾸지 않는다
     UpdateDefaultBranch,
 
-    /// 기본 브랜치를 지금 체크아웃된 브랜치로 병합한다
+    /// 고른 브랜치(비면 업로드 브랜치)를 원격에서 받아 지금 체크아웃된 브랜치로 병합한다
     MergeDefaultIntoCurrent,
 
     /// 현재 브랜치를 upstream 에서 당긴다(--ff-only)
@@ -28,7 +28,10 @@ public enum BulkOperationKind
     CommitAndPush,
 
     /// 진행 중인 병합·리베이스를 되돌린다
-    AbortOperation
+    AbortOperation,
+
+    /// 체크아웃을 작업 브랜치로 바꾼다 — 덮어쓸 변경이 있으면 git 이 거부하고 그대로 남는다
+    SwitchToWorkBranch
 }
 
 public enum StepOutcome

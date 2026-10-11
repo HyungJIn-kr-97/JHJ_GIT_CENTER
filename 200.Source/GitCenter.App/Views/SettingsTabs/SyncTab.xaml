@@ -1,0 +1,44 @@
+﻿<UserControl x:Class="GitCenter.App.Views.SettingsTabs.SyncTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf">
+    <!-- 설정 「동기화」 탭. 계약: 로직이 없는 탭 조각이다 — DataContext(SettingsViewModel)는 SettingsWindow 에서 물려받는다 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+        <StackPanel>
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="스스로 도는 일" Style="{StaticResource SectionTitle}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="230" />
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="목록 다시 훑기(분)" VerticalAlignment="Center" Margin="0,4" />
+                        <TextBox Grid.Column="1" Text="{Binding Settings.RescanMinutes}" Margin="0,4" />
+                        <TextBlock Grid.Column="2" Text="0 이면 수동으로만 합니다" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="10,4,0,4" />
+
+                        <TextBlock Grid.Row="1" Text="상태 다시 읽기(분)" VerticalAlignment="Center" Margin="0,4" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Settings.StatusRefreshMinutes}" Margin="0,4" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="원격에 닿지 않습니다 — 로컬만 읽습니다"
+                                   Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,4,0,4" />
+
+                        <TextBlock Grid.Row="2" Text="자동 Fetch(분)" VerticalAlignment="Center" Margin="0,4" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Settings.AutoFetchMinutes}" Margin="0,4" />
+                        <TextBlock Grid.Row="2" Grid.Column="2" Text="0 이 기본입니다 — 켜면 원격을 주기로 읽습니다"
+                                   Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,4,0,4" />
+                    </Grid>
+                    <CheckBox Content="경로가 사라진 저장소를 같은 이름으로 루트에서 다시 찾아 잇습니다" Margin="0,10,0,0"
+                              IsChecked="{Binding Settings.AutoRelinkBroken}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

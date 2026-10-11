@@ -7,7 +7,11 @@ using GitCenter.Application.Abstractions;
 using GitCenter.Application.Settings;
 using GitCenter.Infrastructure.GitHubDesktop;
 using Jhj.Core.App;
+using Jhj.Core.Diagnostics;
+using Jhj.Core.Updates;
+using Jhj.Core.Wpf.Hotkeys;
 using Jhj.Core.Wpf.Shell;
+using Jhj.Core.Wpf.Updates;
 using Microsoft.Win32;
 using Serilog;
 
@@ -22,11 +26,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsStore _store;
     private readonly MainViewModel _main;
 
-    public SettingsViewModel(ISettingsStore store, AppSettings settings, MainViewModel main)
+    public SettingsViewModel(ISettingsStore store, AppSettings settings, MainViewModel main, UpdateOptions updateOptions)
     {
         _store = store;
         _main = main;
         Settings = settings;
+        Update = new UpdatePanelViewModel(
+            updateOptions, new UpdateSettings(settings), SetAutoUpdate, (title, body) => Notify?.Invoke(title, body));
+        Hotkeys = new HotkeySlotEditor([settings.Hotkey, .. settings.ExtraHotkeys], SetHotkeys);
 
         foreach (var root in settings.ScanRoots)
         {
@@ -58,6 +65,83 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public AppSettings Settings { get; }
+
+    /// 계약: 「화면」 탭의 업데이트 구역 — 화면·동작은 JHJ_CS_CORE 의 UpdatePanel 이 갖는다
+    public UpdatePanelViewModel Update { get; }
+
+    /// <summary>적용 1분 전 알림 (제목, 본문) — App 이 트레이 말풍선을 붙인다.</summary>
+    public Action<string, string>? Notify { get; set; }
+
+    // 계약: 이 창의 다른 칸처럼 「적용」에서 저장한다 — 여기서는 값만 옮긴다
+    private void SetAutoUpdate(bool enabled, string time, bool notify)
+    {
+        Settings.AutoUpdateEnabled = enabled;
+        Settings.AutoUpdateTime = time;
+        Settings.AutoUpdateNotify = notify;
+    }
+
+    /// 계약: 「일반」 탭의 단축키 줄 — 줄 상태·판정·등록은 JHJ_CS_CORE 의 HotkeySlotEditor 가 갖는다
+    public HotkeySlotEditor Hotkeys { get; }
+
+    /// <summary>트레이 아이콘 고정을 지금 입힌다 — App 이 TrayHost.SetPinned 를 붙인다.</summary>
+    public Action<bool>? PinTray { get; set; }
+
+    // 계약: 등록은 편집기가 「저장」에서 이미 했다 — 여기서는 값만 옮기고 파일 저장은 「적용」이다
+    private void SetHotkeys(IReadOnlyList<string> texts)
+    {
+        if (texts.Count == 0)
+        {
+            return;
+        }
+
+        Settings.Hotkey = texts[0];
+        Settings.ExtraHotkeys = [.. texts.Skip(1)];
+    }
+
+    // 계약: 저장소 경로·원격 주소·작성자는 싣지 않는다 — 사용자가 이슈에 그대로 붙이므로 개수와 설정값만 낸다
+    private string BuildDiagnostics() => new DiagnosticsReportBuilder()
+        .Section("Git Center", sb =>
+        {
+            sb.AppendLine($"- 목록 출처: 루트 {Settings.ScanRoots.Count} · 수동 {Settings.ManualPaths.Count} · 숨김 {Settings.ExcludedIds.Count} · gh 계정 {Settings.GitHubOwners.Count} · 명령 {Settings.CommandSources.Count}");
+            sb.AppendLine($"- 연동: GitHub Desktop {Settings.GitHubDesktopEnabled} · gh 계정 {Settings.GitHubAccountEnabled}");
+            sb.AppendLine($"- 주기(분): 다시 훑기 {Settings.RescanMinutes} · 상태 {Settings.StatusRefreshMinutes} · 자동 Fetch {Settings.AutoFetchMinutes}");
+            sb.AppendLine($"- git: 동시 실행 {Settings.Concurrency} · 제한 시간 {Settings.GitTimeoutSeconds}초 · ff-only {Settings.FastForwardOnly} · stash {Settings.AutoStashBeforePull}");
+            sb.AppendLine($"- 화면: 명암 {Settings.Theme} · 색 {Settings.Palette} · 언어 {Settings.Language} · 배율 {Settings.UiScale}");
+            sb.AppendLine($"- 단축키: {string.Join(" · ", Hotkeys.Slots.Select(r => r.SettledText))}");
+        })
+        .EventLog()
+        .Build();
+
+    [RelayCommand]
+    private void SaveDiagnostics()
+    {
+        var dialog = new SaveFileDialog
+        {
+            FileName = DiagnosticsReportBuilder.DefaultFileName,
+            Filter = "Markdown (*.md)|*.md",
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            TestResult = Loc.T(DiagnosticsReportBuilder.TrySave(dialog.FileName, BuildDiagnostics())
+                ? "Saved the diagnostics file."
+                : "Could not save the file.");
+        }
+    }
+
+    [RelayCommand]
+    private void OpenIssue()
+    {
+        if (!ClipboardText.TryCopy(BuildDiagnostics()))
+        {
+            TestResult = Loc.T("Could not copy to the clipboard.");
+            return;
+        }
+
+        TestResult = Loc.T(Jhj.Core.Windows.Shell.ShellOpener.OpenUrl(AppLinks.NewIssueUrl)
+            ? "Copied the diagnostics. Paste them into the issue."
+            : "Could not open the link.");
+    }
 
     public ObservableCollection<ScanRootRow> Roots { get; } = [];
 
@@ -431,6 +515,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         StartupRegistry.Set(StartAtLogin);
         Settings.StartAtLogin = StartAtLogin;
+        PinTray?.Invoke(Settings.PinTrayIcon);
+        DiagnosticsLog.Enabled = Settings.DiagnosticsEnabled;
 
         ThemeManager.ApplyPreference(Settings.Palette, Settings.Theme);
         Loc.SetLanguage(Settings.Language);
@@ -469,6 +555,10 @@ public sealed partial class SettingsViewModel : ObservableObject
             LoadIconChoices();
             AppIcon.Apply(Settings.AppIcon);
             _main.NotifyDisplaySettingsChanged();
+
+            // 왜: 설정값만 되돌리면 등록된 키는 옛 값 그대로다 — 등록과 줄 목록을 함께 맞춘다
+            Jhj.Core.Wpf.Hotkeys.HotkeyService.Current?.Reload([Settings.Hotkey, .. Settings.ExtraHotkeys]);
+            Hotkeys.Rebuild();
         }
     }
 }

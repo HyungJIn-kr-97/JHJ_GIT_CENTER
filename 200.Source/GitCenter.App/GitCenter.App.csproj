@@ -7,9 +7,9 @@
     <!-- 계약: 설치 파일(JHJ_Git-Center_&lt;버전&gt;_win-x64.exe)과 같은 이름이다 -->
     <AssemblyName>JHJ_Git-Center</AssemblyName>
 
-    <Product>Git Center</Product>
+    <Product>JHJ Git Center</Product>
     <!-- 계약: 작업 관리자 「시작 앱」·속성 창의 파일 설명에 보이는 이름 -->
-    <AssemblyTitle>Git 통합 관리 센터</AssemblyTitle>
+    <AssemblyTitle>JHJ Git 통합 관리 센터</AssemblyTitle>
     <Description>여러 git 저장소를 한 화면에서 보고 일괄로 받고 올린다</Description>
     <Company>jhj</Company>
     <Authors>jhj</Authors>
@@ -33,6 +33,9 @@
     <ProjectReference Include="..\GitCenter.Infrastructure\GitCenter.Infrastructure.csproj" />
   </ItemGroup>
 
+  <!-- 계약: JHJ_CS_CORE 를 이 저장소와 나란히 받아 두면 이 한 줄이면 된다 (아니면 환경변수 JHJ_CORE_ROOT) -->
+  <Import Project="..\..\..\JHJ_CS_CORE\200.Source\100.Core\cs\Jhj.Core.props" />
+
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="H.NotifyIcon.Wpf" />
@@ -49,6 +52,7 @@
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- 계약: exe 아이콘(ApplicationIcon)과 별개로 WPF 리소스로도 넣어야 트레이가 pack URI 로 읽는다 -->
     <Resource Include="Resources\app-icon.ico" />
+    <Resource Include="Resources\app-icon-glyph.ico" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 using GitCenter.App.ViewModels;
 
 namespace GitCenter.App.Views;
@@ -19,5 +20,14 @@ public partial class SettingsWindow : Window
     {
         _hotkey.Register();
         Close();
+    }
+
+    /// 계약: 제목 표시줄이 없다 — 머리 줄을 끌어 창을 옮긴다
+    private void OnCaptionMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            DragMove();
+        }
     }
 }

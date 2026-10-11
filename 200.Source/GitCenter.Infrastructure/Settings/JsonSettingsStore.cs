@@ -1,82 +1,41 @@
-using System.Text.Json;
 using GitCenter.Application.Abstractions;
 using GitCenter.Application.Settings;
+using CoreStore = Jhj.Core.Settings.JsonSettingsStore<GitCenter.Application.Settings.AppSettings>;
 
 namespace GitCenter.Infrastructure.Settings;
 
 /// <summary>
 /// 설정 한 벌을 %LOCALAPPDATA%\JHJ_Git-Center\settings.json 에 둔다.
-/// 함정: 깨진 json 을 만나면 settings.bad.json 으로 옮기고 기본값으로 연다 — 앱이 안 뜨는 것보다 낫다.
+/// 계약: 형식·원자적 쓰기·깨짐 복구는 JHJ_CS_CORE 가 한다 — 여기는 **이 앱의 기본값**만 더한다.
 /// </summary>
 public sealed class JsonSettingsStore : ISettingsStore
 {
-    public const string AppFolderName = "JHJ_Git-Center";
+    private readonly CoreStore _store = new(WithDefaults);
 
-    private readonly JsonSerializerOptions _options = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
+    public string SettingsPath => _store.Path;
 
-    private readonly SemaphoreSlim _writeGate = new(1, 1);
+    /// <summary>로그 등 다른 파일이 함께 쓰는 자료 폴더.</summary>
+    public static string DataRoot => Jhj.Core.App.AppPaths.Root;
 
-    public string SettingsPath => Path.Combine(DataRoot, "settings.json");
+    public Task<AppSettings> LoadAsync(CancellationToken cancellationToken) => _store.LoadAsync(cancellationToken);
 
-    public static string DataRoot => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        AppFolderName);
-
-    public async Task<AppSettings> LoadAsync(CancellationToken cancellationToken)
-    {
-        var path = SettingsPath;
-        if (!File.Exists(path))
-        {
-            return WithDefaults(new AppSettings());
-        }
-
-        try
-        {
-            await using var stream = File.OpenRead(path);
-            var settings = await JsonSerializer
-                .DeserializeAsync<AppSettings>(stream, _options, cancellationToken)
-                .ConfigureAwait(false);
-            return WithDefaults(settings ?? new AppSettings());
-        }
-        catch (JsonException)
-        {
-            BackupCorrupt(path);
-            return WithDefaults(new AppSettings());
-        }
-        catch (IOException)
-        {
-            return WithDefaults(new AppSettings());
-        }
-    }
-
-    public async Task SaveAsync(AppSettings settings, CancellationToken cancellationToken)
-    {
-        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            Directory.CreateDirectory(DataRoot);
-            var temporary = SettingsPath + ".tmp";
-
-            await using (var stream = File.Create(temporary))
-            {
-                await JsonSerializer.SerializeAsync(stream, settings, _options, cancellationToken).ConfigureAwait(false);
-            }
-
-            // 왜: 쓰다가 끊겨도 옛 설정이 남게 — 임시 파일에 다 쓴 뒤 바꿔 끼운다
-            File.Move(temporary, SettingsPath, overwrite: true);
-        }
-        finally
-        {
-            _writeGate.Release();
-        }
-    }
+    public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken) => _store.SaveAsync(settings, cancellationToken);
 
     /// 계약: 첫 실행이면 이 PC 에서 가장 그럴듯한 루트를 하나 넣어 둔다 — 빈 목록으로 열면 쓸 수가 없다
     private static AppSettings WithDefaults(AppSettings settings)
     {
+        // 왜: 자리표가 Ctrl+Alt+G 에서 3번으로 옮겨 갔다(060.단축키-대장, 2026-10-10) — 그 값을 쥔 PC 만 새 기본값으로 옮긴다
+        if (settings.Hotkey is "Ctrl+Alt+G")
+        {
+            settings.Hotkey = AppSettings.DefaultHotkey;
+        }
+
+        // 왜: 「chore: 일괄 반영」 한 줄로는 무엇을 왜 올렸는지 안 남는다 — 옛 기본값을 쥔 PC 만 새 기본값으로 옮긴다
+        if (settings.CommitMessageTemplate is AppSettings.LegacyCommitSubject)
+        {
+            settings.CommitMessageTemplate = AppSettings.DefaultCommitSubject;
+        }
+
         if (settings.ScanRoots.Count > 0)
         {
             return settings;
@@ -101,22 +60,6 @@ public sealed class JsonSettingsStore : ISettingsStore
         yield return Path.Combine(home, "Documents", "GitHub");
         yield return Path.Combine(home, "source", "repos");
         yield return Path.Combine(home, "git");
-    }
-
-    private static void BackupCorrupt(string path)
-    {
-        try
-        {
-            var directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                File.Copy(path, Path.Combine(directory, "settings.bad.json"), true);
-            }
-        }
-        catch
-        {
-            // 계약: 백업 실패가 앱 시작을 막지 않는다
-        }
     }
 }
 

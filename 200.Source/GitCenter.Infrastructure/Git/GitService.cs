@@ -46,6 +46,16 @@ public sealed class GitService(IGitRunner runner) : IGitService
         status.Untracked = parsed.Changes.Count(c => c.IsUntracked);
         status.Conflicted = parsed.Changes.Count(c => c.IsConflict);
 
+        // 왜: 줄 수는 바뀐 것이 있을 때만 센다 — 깨끗한 저장소마다 diff 를 돌리면 새로 고침이 그만큼 느려진다
+        if (status.Staged + status.Unstaged > 0)
+        {
+            var stat = await _runner.RunAsync(repo.Path, ["diff", "HEAD", "--shortstat"], cancellationToken, 30).ConfigureAwait(false);
+            if (stat.Ok)
+            {
+                (status.Insertions, status.Deletions) = ParseShortStat(stat.StdOut);
+            }
+        }
+
         var log = await _runner.RunAsync(repo.Path,
             ["log", "-1", $"--format=%H{Unit}%s{Unit}%an{Unit}%cI"], cancellationToken, 30).ConfigureAwait(false);
 
@@ -91,12 +101,311 @@ public sealed class GitService(IGitRunner runner) : IGitService
         return status;
     }
 
+    /// 계약: 「3 files changed, 10 insertions(+), 2 deletions(-)」 에서 두 수만 뽑는다 — 한쪽이 없으면 그 낱말째 빠진다
+    internal static (int Insertions, int Deletions) ParseShortStat(string text)
+    {
+        int Pick(string word)
+        {
+            var parts = text.Split(',', StringSplitOptions.TrimEntries);
+            var part = parts.FirstOrDefault(p => p.Contains(word, StringComparison.Ordinal));
+            return part is not null && int.TryParse(part.Split(' ')[0], out var n) ? n : 0;
+        }
+
+        return (Pick("insertion"), Pick("deletion"));
+    }
+
+    public async Task<IReadOnlyList<DateOnly>> ReadCommitDaysAsync(RepoEntry repo, int days, CancellationToken cancellationToken)
+    {
+        // 계약: %cs 는 커밋한 날(yyyy-MM-dd)이다 — 커밋이 없는 새 저장소는 실패로 돌아오고 빈 목록이 된다
+        var log = await _runner.RunAsync(repo.Path,
+            ["log", $"--since={days}.days.ago", "--format=%cs"], cancellationToken, 60).ConfigureAwait(false);
+        if (!log.Ok)
+        {
+            return [];
+        }
+
+        var found = new List<DateOnly>();
+        foreach (var line in log.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (DateOnly.TryParseExact(line, "yyyy-MM-dd", out var day))
+            {
+                found.Add(day);
+            }
+        }
+
+        return found;
+    }
+
+    public async Task<IReadOnlyList<CommitInfo>> ReadCommitsAsync(RepoEntry repo, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    {
+        // 왜: --since·--until 은 시각까지 견줘 날 경계에서 어긋난다 — 이틀씩 넉넉히 받아 커밋한 날(%cs)로 다시 거른다
+        // 계약: 제목(%s)을 맨 끝에 둔다 — 제목 안에 구분 글자가 있어도 앞 칸이 밀리지 않는다
+        var log = await _runner.RunAsync(repo.Path,
+        [
+            "log", $"--since={from.AddDays(-2):yyyy-MM-dd}", $"--until={to.AddDays(2):yyyy-MM-dd}",
+            $"--format=%H{Unit}%cs{Unit}%an{Unit}%cI{Unit}%s"
+        ], cancellationToken, 60).ConfigureAwait(false);
+        if (!log.Ok)
+        {
+            return [];
+        }
+
+        var found = new List<CommitInfo>();
+        foreach (var line in log.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = line.TrimEnd('\r').Split(Unit, 5);
+            if (fields.Length == 5 && DateOnly.TryParseExact(fields[1], "yyyy-MM-dd", out var day) && day >= from && day <= to)
+            {
+                found.Add(new CommitInfo(fields[0], day, fields[2], DateTimeOffset.TryParse(fields[3], out var when) ? when : null, fields[4]));
+            }
+        }
+
+        return found;
+    }
+
     public async Task<IReadOnlyList<FileChange>> ReadChangesAsync(RepoEntry repo, CancellationToken cancellationToken)
     {
         var porcelain = await _runner.RunAsync(repo.Path,
             ["status", "--porcelain=v2"], cancellationToken, 60).ConfigureAwait(false);
 
-        return porcelain.Ok ? PorcelainV2.Parse(porcelain.StdOut).Changes : [];
+        if (!porcelain.Ok)
+        {
+            return [];
+        }
+
+        var changes = PorcelainV2.Parse(porcelain.StdOut).Changes;
+        if (changes.Any(c => !c.IsUntracked))
+        {
+            // 함정: 한글 경로는 -z 없이는 따옴표·8진수로 나온다 — -z 로 받아야 status 의 경로와 맞는다
+            var stat = await _runner.RunAsync(repo.Path, ["diff", "HEAD", "--numstat", "-z"], cancellationToken, 60).ConfigureAwait(false);
+            if (stat.Ok)
+            {
+                var lines = ParseNumStat(stat.StdOut);
+                foreach (var change in changes)
+                {
+                    if (lines.TryGetValue(change.Path, out var found))
+                    {
+                        (change.Insertions, change.Deletions, change.IsBinary) = found;
+                    }
+                }
+            }
+        }
+
+        await Task.Run(() =>
+        {
+            foreach (var change in changes.Where(c => c.IsUntracked))
+            {
+                CountNewFile(repo.Path, change);
+            }
+        }, cancellationToken).ConfigureAwait(false);
+
+        return changes;
+    }
+
+    /// 계약: 「추가⇥삭제⇥경로␀」 가 이어진다 — 이름이 바뀐 파일은 경로 칸이 비고 「옛 경로␀새 경로␀」 가 뒤따른다
+    /// 계약: 바이너리는 두 수 자리에 '-' 가 온다
+    internal static Dictionary<string, (int? Insertions, int? Deletions, bool IsBinary)> ParseNumStat(string text)
+    {
+        var found = new Dictionary<string, (int?, int?, bool)>(StringComparer.Ordinal);
+        var tokens = text.Split('\0');
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            var parts = tokens[i].Split('\t');
+            if (parts.Length < 3)
+            {
+                continue;
+            }
+
+            var path = parts[2];
+            if (path.Length == 0 && i + 2 < tokens.Length)
+            {
+                path = tokens[i + 2];
+                i += 2;
+            }
+
+            found[path] = int.TryParse(parts[0], out var added) && int.TryParse(parts[1], out var removed)
+                ? (added, removed, false)
+                : (null, null, true);
+        }
+
+        return found;
+    }
+
+    // 왜: 추적 전 파일은 diff 에 안 나온다 — 파일을 읽어 줄 수를 센다. 큰 파일은 세지 않고 비워 둔다
+    private const long NewFileCountLimit = 2 * 1024 * 1024;
+
+    private static void CountNewFile(string root, FileChange change)
+    {
+        try
+        {
+            // 함정: status 는 통째로 새 폴더를 「폴더/」 한 줄로 적는다 — 파일이 아니면 세지 않는다
+            var file = new FileInfo(Path.Combine(root, change.Path));
+            if (!file.Exists || file.Length > NewFileCountLimit)
+            {
+                return;
+            }
+
+            var bytes = File.ReadAllBytes(file.FullName);
+            if (Array.IndexOf(bytes, (byte)0, 0, Math.Min(bytes.Length, 8000)) >= 0)
+            {
+                change.IsBinary = true;
+                return;
+            }
+
+            var count = bytes.Count(b => b == (byte)'\n');
+            change.Insertions = bytes.Length > 0 && bytes[^1] != (byte)'\n' ? count + 1 : count;
+            change.Deletions = 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 왜: 잠긴 파일 하나 때문에 목록 전체를 못 보여 주면 안 된다 — 그 줄만 비워 둔다
+        }
+    }
+
+    /// <summary>한 파일의 변경 내용을 줄 단위로 읽는다.</summary>
+    /// 계약: 읽기뿐이다 — diff 는 작업 트리를 건드리지 않는다
+    /// 함정: 아직 추적하지 않는 파일은 diff 가 빈 결과를 낸다 — --no-index 로 /dev/null 과 견준다
+    public async Task<FileDiff> ReadDiffAsync(RepoEntry repo, FileChange change, CancellationToken cancellationToken)
+    {
+        var path = change.Path;
+        var diff = new FileDiff { Path = path };
+
+        List<string> args = change.IsUntracked
+            ? ["diff", "--no-color", "--no-index", "--", NullDevice, path]
+            : change.IsStaged && !change.HasWorkTreeChange
+                ? ["diff", "--no-color", "--cached", "--", path]
+                : ["diff", "--no-color", "--", path];
+
+        var result = await _runner.RunAsync(repo.Path, args, cancellationToken, 60).ConfigureAwait(false);
+
+        // 왜: --no-index 는 두 파일이 다르면 종료 코드 1 을 낸다 — 실패가 아니라 「다름」이다
+        var text = result.StdOut;
+        if (text.Length == 0 && !result.Ok && !change.IsUntracked)
+        {
+            diff.Note = result.StdErr.Length > 0 ? result.StdErr.Trim() : "변경 내용을 읽지 못했습니다.";
+            return diff;
+        }
+
+        if (text.Contains("Binary files ", StringComparison.Ordinal) || text.Contains("GIT binary patch", StringComparison.Ordinal))
+        {
+            diff.IsBinary = true;
+            diff.Note = "바이너리 파일이라 줄 단위로 견줄 수 없습니다.";
+            return diff;
+        }
+
+        ParseUnifiedDiff(text, diff);
+
+        if (diff.Lines.Count == 0)
+        {
+            // 함정: 스테이지에만 올라간 파일은 작업 트리 diff 가 비어 있다 — 그때는 --cached 로 한 번 더 본다
+            if (change.IsStaged)
+            {
+                var staged = await _runner.RunAsync(repo.Path,
+                    ["diff", "--no-color", "--cached", "--", path], cancellationToken, 60).ConfigureAwait(false);
+                ParseUnifiedDiff(staged.StdOut, diff);
+            }
+
+            if (diff.Lines.Count == 0)
+            {
+                diff.Note = "보여줄 변경 줄이 없습니다 — 이름만 바뀌었거나 권한만 달라진 파일일 수 있습니다.";
+            }
+        }
+
+        return diff;
+    }
+
+    // 계약: /dev/null 은 Windows git 에서도 그대로 통한다 — NUL 로 바꾸면 --no-index 가 못 읽는다
+    private const string NullDevice = "/dev/null";
+
+    private static void ParseUnifiedDiff(string text, FileDiff diff)
+    {
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        var oldNo = 0;
+        var newNo = 0;
+
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = raw.TrimEnd('\r');
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            if (line.StartsWith("@@", StringComparison.Ordinal))
+            {
+                (oldNo, newNo) = ParseHunkHeader(line);
+                diff.Lines.Add(new DiffLine { Kind = DiffLineKind.Hunk, Text = line });
+                continue;
+            }
+
+            if (line.StartsWith("diff ", StringComparison.Ordinal) || line.StartsWith("index ", StringComparison.Ordinal)
+                || line.StartsWith("--- ", StringComparison.Ordinal) || line.StartsWith("+++ ", StringComparison.Ordinal)
+                || line.StartsWith("new file", StringComparison.Ordinal) || line.StartsWith("deleted file", StringComparison.Ordinal)
+                || line.StartsWith("similarity", StringComparison.Ordinal) || line.StartsWith("rename ", StringComparison.Ordinal)
+                || line.StartsWith("old mode", StringComparison.Ordinal) || line.StartsWith("new mode", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // 계약: 「\ No newline at end of file」 는 내용이 아니라 알림이다
+            if (line.StartsWith('\\'))
+            {
+                continue;
+            }
+
+            switch (line[0])
+            {
+                case '+':
+                    diff.Lines.Add(new DiffLine { Kind = DiffLineKind.Added, Text = line[1..], NewNo = newNo++ });
+                    diff.Added++;
+                    break;
+                case '-':
+                    diff.Lines.Add(new DiffLine { Kind = DiffLineKind.Removed, Text = line[1..], OldNo = oldNo++ });
+                    diff.Removed++;
+                    break;
+                default:
+                    diff.Lines.Add(new DiffLine
+                    {
+                        Kind = DiffLineKind.Context,
+                        Text = line.Length > 0 ? line[1..] : string.Empty,
+                        OldNo = oldNo++,
+                        NewNo = newNo++
+                    });
+                    break;
+            }
+        }
+    }
+
+    // 계약: "@@ -12,7 +12,9 @@" 에서 두 시작 줄 번호만 뽑는다
+    private static (int Old, int New) ParseHunkHeader(string line)
+    {
+        var old = 1;
+        var next = 1;
+        var parts = line.Split(' ');
+        foreach (var part in parts)
+        {
+            if (part.StartsWith('-'))
+            {
+                old = FirstNumber(part[1..]);
+            }
+            else if (part.StartsWith('+'))
+            {
+                next = FirstNumber(part[1..]);
+            }
+        }
+
+        return (old, next);
+    }
+
+    private static int FirstNumber(string text)
+    {
+        var comma = text.IndexOf(',');
+        var head = comma < 0 ? text : text[..comma];
+        return int.TryParse(head, out var value) ? value : 1;
     }
 
     public async Task<IReadOnlyList<BranchInfo>> ReadBranchesAsync(RepoEntry repo, CancellationToken cancellationToken)
@@ -176,7 +485,26 @@ public sealed class GitService(IGitRunner runner) : IGitService
             try
             {
                 var content = File.Exists(full) ? await File.ReadAllTextAsync(full, cancellationToken).ConfigureAwait(false) : string.Empty;
-                files.Add(ConflictParser.Parse(relative, content));
+                var (merged, hasBase, note) = await BuildMergedAsync(repo, relative, cancellationToken).ConfigureAwait(false);
+                if (merged is null || merged.Contains((byte)0))
+                {
+                    var plain = ConflictParser.Parse(relative, content);
+                    plain.Note ??= note;
+                    files.Add(plain);
+                    continue;
+                }
+
+                var file = ConflictParser.Parse(relative, Decode(merged));
+                file.HasBase = hasBase;
+                file.CanResolve = file.Hunks.Count > 0;
+
+                // 왜: 표식이 없는 작업 파일은 사용자가 이미 손으로 고친 것이다 — 덮어쓰기 전에 알려야 한다
+                if (!content.Contains("<<<<<<<", StringComparison.Ordinal))
+                {
+                    file.Note = "작업 파일에는 표식이 없습니다 — 이미 손으로 고쳤다면 여기서 적용하지 마십시오(적용하면 지금 파일은 백업 후 덮어씁니다).";
+                }
+
+                files.Add(file);
             }
             catch (Exception ex)
             {
@@ -185,6 +513,128 @@ public sealed class GitService(IGitRunner runner) : IGitService
         }
 
         return files;
+    }
+
+    /// <summary>
+    /// 인덱스의 세 단계(공통 조상 · 내 것 · 상대 것)로 diff3 표식이 든 내용을 새로 만든다.
+    /// 왜: 작업 파일의 표식에는 공통 조상이 없을 수 있다(merge.conflictStyle 기본값) — 조상이 있어야 자동 판정을 한다.
+    /// 계약: 작업 파일을 건드리지 않는다 — git 이 꺼내 준 임시 파일 셋 위에서만 돌리고 끝나면 지운다.
+    /// 함정: 글자로 풀지 않고 바이트로 읽는다 — 인코딩을 한 번 거치면 UTF-8 이 아닌 파일이 조용히 깨진다.
+    /// </summary>
+    private async Task<(byte[]? Merged, bool HasBase, string? Note)> BuildMergedAsync(RepoEntry repo, string path, CancellationToken ct)
+    {
+        var temp = await _runner.RunAsync(repo.Path, ["checkout-index", "--stage=all", "--temp", "--", path], ct, 60).ConfigureAwait(false);
+        var names = temp.StdOut.Split('\n')[0].Split('\t')[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (!temp.Ok || names.Length != 3)
+        {
+            return (null, false, "인덱스에서 양쪽 내용을 꺼내지 못했습니다.");
+        }
+
+        var paths = names.Select(n => n == "." ? null : Path.Combine(repo.Path, n)).ToArray();
+        string? emptyBase = null;
+        try
+        {
+            if (paths[1] is not { } ours || paths[2] is not { } theirs)
+            {
+                return (null, false, "한쪽이 지운 파일입니다 — 남길지 지울지는 편집기·터미널에서 정해 주십시오.");
+            }
+
+            if (paths[0] is null)
+            {
+                emptyBase = Path.Combine(repo.Path, ".merge_file_empty_" + Guid.NewGuid().ToString("N"));
+                await File.WriteAllBytesAsync(emptyBase, [], ct).ConfigureAwait(false);
+            }
+
+            // 계약: merge-file 은 결과를 첫 파일(내 것)에 쓰고, 남은 충돌 수를 종료 코드로 돌려준다 — 음수·128 이상은 실패다
+            var merge = await _runner.RunAsync(repo.Path,
+                ["merge-file", "--diff3", "-L", "HEAD", "-L", "base", "-L", "incoming", ours, paths[0] ?? emptyBase!, theirs],
+                ct, 60).ConfigureAwait(false);
+            if (merge.ExitCode is < 0 or >= 128)
+            {
+                return (null, false, "줄 단위로 견줄 수 없는 파일입니다(바이너리 등).");
+            }
+
+            return (await File.ReadAllBytesAsync(ours, ct).ConfigureAwait(false), paths[0] is not null, null);
+        }
+        finally
+        {
+            foreach (var file in paths.Append(emptyBase))
+            {
+                if (file is not null && File.Exists(file))
+                {
+                    File.Delete(file);
+                }
+            }
+        }
+    }
+
+    private static string Decode(byte[] bytes)
+    {
+        try
+        {
+            return new System.Text.UTF8Encoding(false, true).GetString(bytes);
+        }
+        catch (System.Text.DecoderFallbackException)
+        {
+            return System.Text.Encoding.Latin1.GetString(bytes);
+        }
+    }
+
+    public async Task<ConflictActionResult> ResolveConflictAsync(RepoEntry repo, string path, IReadOnlyList<ConflictChoice> choices, CancellationToken cancellationToken)
+    {
+        var (merged, _, note) = await BuildMergedAsync(repo, path, cancellationToken).ConfigureAwait(false);
+        if (merged is null)
+        {
+            return new(false, note ?? "충돌 내용을 읽지 못했습니다.");
+        }
+
+        // 계약: Latin1 은 바이트와 글자가 1:1 이다 — 표식은 ASCII 라 이대로 줄을 골라 내도 원래 바이트가 그대로 남는다
+        var resolved = ConflictResolver.Apply(System.Text.Encoding.Latin1.GetString(merged), choices, out var error);
+        if (resolved is null)
+        {
+            return new(false, error);
+        }
+
+        var full = Path.Combine(repo.Path, path.Replace('/', Path.DirectorySeparatorChar));
+        var backup = string.Empty;
+        if (File.Exists(full))
+        {
+            var gitDir = await _runner.RunAsync(repo.Path, ["rev-parse", "--absolute-git-dir"], cancellationToken, 20).ConfigureAwait(false);
+            if (!gitDir.Ok)
+            {
+                return new(false, "백업 자리를 찾지 못해 적용하지 않았습니다.");
+            }
+
+            // 계약: 덮어쓰기 전의 파일을 남긴다 — 이 앱은 되돌릴 수 없는 일을 하지 않는다
+            var folder = Path.Combine(gitDir.StdOut.Trim(), "jhj-conflict-backup", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+            backup = Path.Combine(folder, path.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+            File.Copy(full, backup, true);
+        }
+
+        await File.WriteAllBytesAsync(full, System.Text.Encoding.Latin1.GetBytes(resolved), cancellationToken).ConfigureAwait(false);
+        var add = await _runner.RunAsync(repo.Path, ["add", "--", path], cancellationToken, 60).ConfigureAwait(false);
+        return add.Ok
+            ? new(true, $"{choices.Count}구간을 풀어 스테이지했습니다." + (backup.Length > 0 ? $" 이전 파일: {backup}" : string.Empty))
+            : new(false, "파일은 다시 썼지만 스테이지하지 못했습니다: " + FirstLine(add.Text));
+    }
+
+    public async Task<ConflictActionResult> ConcludeMergeAsync(RepoEntry repo, CancellationToken cancellationToken)
+    {
+        var gitDir = await _runner.RunAsync(repo.Path, ["rev-parse", "--absolute-git-dir"], cancellationToken, 20).ConfigureAwait(false);
+        if (!gitDir.Ok || DetectOperation(gitDir.StdOut.Trim()) != GitOperationState.Merging)
+        {
+            return new(false, "병합 중이 아닙니다 — 리베이스·체리픽은 터미널에서 --continue 로 이어 주십시오.");
+        }
+
+        var left = await _runner.RunAsync(repo.Path, ["diff", "--name-only", "--diff-filter=U"], cancellationToken, 60).ConfigureAwait(false);
+        if (!left.Ok || left.StdOut.Trim().Length > 0)
+        {
+            return new(false, "아직 풀리지 않은 충돌이 있습니다.");
+        }
+
+        var commit = await _runner.RunAsync(repo.Path, ["commit", "--no-edit"], cancellationToken, 120).ConfigureAwait(false);
+        return commit.Ok ? new(true, "병합을 커밋으로 맺었습니다.") : new(false, FirstLine(commit.Text));
     }
 
     /// 계약: origin/HEAD 가 있으면 그것, 없으면 main·master 순으로 본다 — 둘 다 없으면 null
@@ -315,9 +765,15 @@ public sealed class GitService(IGitRunner runner) : IGitService
         step.Detail = result.Text;
     }
 
+    /// 계약: 받는 브랜치를 적었으면 그것을, 비웠으면 저장소의 기본 브랜치를 쓴다
+    private async Task<string?> ReceiveBranchAsync(RepoEntry repo, BulkOperationOptions options, CancellationToken ct) =>
+        string.IsNullOrWhiteSpace(options.ReceiveBranch)
+            ? await ReadDefaultBranchAsync(repo, ct).ConfigureAwait(false)
+            : options.ReceiveBranch.Trim();
+
     private async Task UpdateDefaultBranchAsync(RepoEntry repo, BulkOperationOptions options, BulkStepResult step, CancellationToken ct)
     {
-        var defaultBranch = await ReadDefaultBranchAsync(repo, ct).ConfigureAwait(false);
+        var defaultBranch = await ReceiveBranchAsync(repo, options, ct).ConfigureAwait(false);
         if (defaultBranch is null)
         {
             step.Outcome = StepOutcome.Skipped;
@@ -356,7 +812,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
 
     private async Task MergeDefaultIntoCurrentAsync(RepoEntry repo, BulkOperationOptions options, BulkStepResult step, CancellationToken ct)
     {
-        var defaultBranch = await ReadDefaultBranchAsync(repo, ct).ConfigureAwait(false);
+        var defaultBranch = await ReceiveBranchAsync(repo, options, ct).ConfigureAwait(false);
         if (defaultBranch is null)
         {
             step.Outcome = StepOutcome.Skipped;
@@ -558,7 +1014,14 @@ public sealed class GitService(IGitRunner runner) : IGitService
             return;
         }
 
-        var message = string.IsNullOrWhiteSpace(options.CommitMessage) ? "chore: 일괄 반영" : options.CommitMessage;
+        var message = string.IsNullOrWhiteSpace(options.CommitMessage) ? "JHJ Git Center 일괄 처리" : options.CommitMessage;
+
+        // 계약: -m 을 두 번 주면 git 이 둘째를 빈 줄 뒤의 본문으로 붙인다
+        List<string> commitArgs = ["commit", "-m", message];
+        if (!string.IsNullOrWhiteSpace(options.CommitBody))
+        {
+            commitArgs.AddRange(["-m", options.CommitBody]);
+        }
 
         var add = await _runner.RunAsync(repo.Path, ["add", "-A"], ct, options.TimeoutSeconds).ConfigureAwait(false);
         if (!add.Ok)
@@ -569,7 +1032,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
             return;
         }
 
-        var commit = await _runner.RunAsync(repo.Path, ["commit", "-m", message], ct, options.TimeoutSeconds).ConfigureAwait(false);
+        var commit = await _runner.RunAsync(repo.Path, commitArgs, ct, options.TimeoutSeconds).ConfigureAwait(false);
         if (commit.Ok)
         {
             step.Outcome = StepOutcome.Success;
@@ -603,11 +1066,17 @@ public sealed class GitService(IGitRunner runner) : IGitService
         var upstream = await _runner.RunAsync(repo.Path,
             ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], ct, 20).ConfigureAwait(false);
 
-        var args = upstream.Ok
-            ? new List<string> { "push", options.RemoteName, $"HEAD:{branch}" }
-            : options.SetUpstreamOnPush
-                ? ["push", "-u", options.RemoteName, branch]
-                : ["push", options.RemoteName, branch];
+        // 계약: 올리는 브랜치가 지금 브랜치와 다르면 그 원격 브랜치로 올린다 — upstream 은 바꾸지 않고, 빨리감기가 안 되면 git 이 거부한다
+        var target = options.PushBranch.Trim();
+        var elsewhere = target.Length > 0 && !string.Equals(target, branch, StringComparison.Ordinal);
+
+        var args = elsewhere
+            ? new List<string> { "push", options.RemoteName, $"HEAD:refs/heads/{target}" }
+            : upstream.Ok
+                ? ["push", options.RemoteName, $"HEAD:{branch}"]
+                : options.SetUpstreamOnPush
+                    ? ["push", "-u", options.RemoteName, branch]
+                    : ["push", options.RemoteName, branch];
 
         var result = await _runner.RunAsync(repo.Path, args, ct, options.TimeoutSeconds).ConfigureAwait(false);
 
@@ -615,7 +1084,9 @@ public sealed class GitService(IGitRunner runner) : IGitService
         {
             var already = result.Text.Contains("Everything up-to-date", StringComparison.OrdinalIgnoreCase);
             step.Outcome = already ? StepOutcome.Skipped : StepOutcome.Success;
-            step.Message = already ? "올릴 것이 없습니다." : $"{branch} 를 올렸습니다.";
+            step.Message = already
+                ? "올릴 것이 없습니다."
+                : elsewhere ? $"{branch} 를 {options.RemoteName}/{target} 로 올렸습니다." : $"{branch} 를 올렸습니다.";
             step.Detail = result.Text;
             return;
         }

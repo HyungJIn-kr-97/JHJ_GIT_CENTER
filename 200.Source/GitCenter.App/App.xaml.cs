@@ -1,5 +1,4 @@
 using System.IO;
-using System.Reflection;
 using System.Windows;
 using GitCenter.App.Localization;
 using GitCenter.App.Services;
@@ -11,6 +10,11 @@ using GitCenter.Application.Settings;
 using GitCenter.Infrastructure.Git;
 using GitCenter.Infrastructure.Settings;
 using GitCenter.Infrastructure.Sources;
+using Jhj.Core.App;
+using Jhj.Core.Wpf.Boot;
+using Jhj.Core.Wpf.Localization;
+using Jhj.Core.Wpf.Shell;
+using Jhj.Core.Wpf.Theme;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,10 +24,8 @@ namespace GitCenter.App;
 
 public partial class App : System.Windows.Application
 {
-    private const string AppName = "JHJ_Git-Center";
-
     private IHost? _host;
-    private SingleInstanceCoordinator? _singleInstance;
+    private SingleInstance? _singleInstance;
     private TrayHost? _tray;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -31,40 +33,39 @@ public partial class App : System.Windows.Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         base.OnStartup(e);
 
-        BootstrapLogger();
-        RegisterExceptionHandlers();
+        // ①~③ 신원 → 옛 이름 이사(이 앱은 옛 이름이 없다) → 테마 브러시
         // 계약: 창이 만들어지기 전에 한 번은 불러야 한다 — 테마 키가 없으면 창 XAML 로딩이 실패한다
-        ThemeManager.Apply(ThemeManager.DefaultPalette, ThemeManager.ResolveIsDark(ThemeManager.SystemMode));
-
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
-        Log.Information("{App} 시작 (v{Version}, PID {Pid})", AppName, version, Environment.ProcessId);
-
-        _singleInstance = new SingleInstanceCoordinator(AppName);
-        if (!_singleInstance.IsPrimary)
+        JhjTheme.Extend = AddGitBrushes;
+        JhjBoot.Begin(new JhjApp
         {
-            // 왜: 두 번째 실행은 첫 번째 창을 띄우고 조용히 사라진다 — 아무 반응이 없으면 고장으로 보인다
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await SingleInstanceCoordinator
-                        .SignalPrimaryAsync(_singleInstance.PipeName, ActivationMessage.ShowWindow, TimeSpan.FromSeconds(2))
-                        .ConfigureAwait(false);
-                }
-                catch
-                {
-                    // 첫 인스턴스가 막 끝났을 수 있다
-                }
-                finally
-                {
-                    Dispatcher.Invoke(() => Shutdown(0));
-                }
-            });
+            Name = "JHJ_Git-Center",
+            DisplayName = "JHJ Git 통합 관리 센터",
+            DefaultPalette = JhjPalettes.Violet,
+        });
 
+        // 계약: 명암이 "system" 인 동안 Windows 의 밝게/어둡게 전환을 따라간다
+        JhjTheme.FollowSystem();
+
+        JhjBoot.BootstrapLogger();
+        RegisterExceptionHandlers();
+
+        Loc.Register(LocStrings.Catalog);
+
+        // ⑦ 이미 떠 있으면 그쪽 창을 띄우고 조용히 사라진다 — 아무 반응이 없으면 고장으로 보인다
+        if (JhjBoot.TryHandOffToRunningInstance(out _singleInstance))
+        {
+            Shutdown(0);
             return;
         }
 
         _ = InitializeAsync();
+    }
+
+    /// 계약: 저장소 상태 다섯 가지의 색 — 공통 뜻 색(Ok·Info·Warn·Danger·Dirty)에 git 이름을 붙인 것이다
+    private static void AddGitBrushes(ResourceDictionary dict, JhjTone tone, bool dark)
+    {
+        dict["BehindBrush"] = dict["InfoBrush"];
+        dict["AheadBrush"] = dict["WarnBrush"];
     }
 
     private async Task InitializeAsync()
@@ -76,16 +77,15 @@ public partial class App : System.Windows.Application
 
             await Dispatcher.InvokeAsync(() =>
             {
-                ThemeManager.Apply(settings.Palette, ThemeManager.ResolveIsDark(settings.Theme));
+                JhjTheme.ApplyPreference(settings.Palette, settings.Theme);
                 Loc.SetLanguage(settings.Language);
 
-                // 계약: 작업 관리자 「시작 앱」에서 끈 것을 설정이 덮어쓰지 않게 — 거기서 껐으면 설정을 끈다
-                if (settings.StartAtLogin && StartupRegistry.IsDisabledByTaskManager())
-                {
-                    settings.StartAtLogin = false;
-                }
+                // 계약: 창이 만들어지기 전에 아이콘 출처를 정한다 — 창 머리·작업 표시줄·트레이가 여기서 받아 간다
+                AppIcon.Configure("pack://application:,,,/Resources/app-icon.ico", IconPresets.All);
+                AppIcon.Apply(settings.AppIcon);
 
-                StartupRegistry.Set(settings.StartAtLogin);
+                // 계약: 작업 관리자 「시작 앱」과 양방향으로 맞춘다 — 거기서 껐으면 설정을 끈다
+                settings.StartAtLogin = StartupRegistry.Sync(settings.StartAtLogin);
 
                 BuildHost(settingsStore, settings);
 
@@ -99,7 +99,7 @@ public partial class App : System.Windows.Application
                 var main = _host.Services.GetRequiredService<MainViewModel>();
                 _ = main.RescanAsync();
 
-                LogFireAndForget(StartListenerAsync(), "SingleInstanceListener");
+                JhjBoot.LogFireAndForget(StartListenerAsync(), "SingleInstanceListener");
             });
         }
         catch (Exception ex)
@@ -107,7 +107,7 @@ public partial class App : System.Windows.Application
             Log.Fatal(ex, "시작 실패");
             System.Windows.MessageBox.Show(
                 $"시작하지 못했습니다: {ex.Message}\n\n{ex.StackTrace}",
-                "Git 통합 관리 센터",
+                "JHJ Git Center",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Shutdown(1);
@@ -163,18 +163,15 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        await _singleInstance.StartListenerAsync(async message =>
-        {
-            if (message == ActivationMessage.ShowWindow)
-            {
-                await Dispatcher.InvokeAsync(() => _tray?.ShowWindow());
-            }
-        }, CancellationToken.None).ConfigureAwait(false);
+        await _singleInstance.StartListenerAsync(
+            _ => Dispatcher.InvokeAsync(() => _tray?.ShowWindow()).Task,
+            CancellationToken.None).ConfigureAwait(false);
     }
 
     protected override async void OnExit(ExitEventArgs e)
     {
         Log.Information("끝남 (ExitCode={ExitCode})", e.ApplicationExitCode);
+        JhjTheme.StopFollowingSystem();
 
         try
         {
@@ -195,20 +192,17 @@ public partial class App : System.Windows.Application
         base.OnExit(e);
     }
 
-    private static void BootstrapLogger() => Log.Logger = Configure(new LoggerConfiguration()).CreateLogger();
-
-    /// <summary>로그 설정은 한 곳뿐이다 — 부트스트랩과 호스트가 같은 것을 쓴다.</summary>
+    /// <summary>호스트 로거 설정 — 부트스트랩(JhjBoot)과 같은 파일에 이어 쓴다.</summary>
     /// 계약: 경로를 코드에서 만든다 — appsettings.json 에 %LOCALAPPDATA% 를 적으면 그대로 폴더 이름이 되는 수가 있다
     private static LoggerConfiguration Configure(LoggerConfiguration logger)
     {
-        var logDir = Path.Combine(JsonSettingsStore.DataRoot, "logs");
-        Directory.CreateDirectory(logDir);
+        var logDir = AppPaths.Ensure(AppPaths.Logs);
 
         return logger
             .MinimumLevel.Information()
             .WriteTo.Debug()
             .WriteTo.File(
-                Path.Combine(logDir, AppName + "-.log"),
+                Path.Combine(logDir, JhjApp.Current.Name + "-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 14,
                 shared: true,
@@ -216,6 +210,7 @@ public partial class App : System.Windows.Application
             .Enrich.FromLogContext();
     }
 
+    // 왜: 문구가 한국어라 Core 의 기본 처리기를 쓰지 않는다 — 나머지 동작은 JhjBoot 와 같다
     private void RegisterExceptionHandlers()
     {
         DispatcherUnhandledException += (_, args) =>
@@ -238,13 +233,5 @@ public partial class App : System.Windows.Application
                 Log.CloseAndFlush();
             }
         };
-    }
-
-    /// 왜: 띄워 두고 잊은 작업의 예외가 조용히 사라지지 않게 — 로그에는 남긴다
-    private static void LogFireAndForget(Task task, string operation)
-    {
-        task.ContinueWith(
-            t => Log.Error(t.Exception!.GetBaseException(), "배경 작업 {Operation} 실패", operation),
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
     }
 }

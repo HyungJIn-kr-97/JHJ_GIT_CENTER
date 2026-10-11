@@ -12,7 +12,11 @@
 | `800.Deploy/` | `Build-Exe.bat` · `publish.ps1` · `bump-version.ps1`. 산출물 `publish/` 는 git 제외 |
 
 여러 git 저장소를 한 화면에서 다루는 **Windows 데스크톱 앱**(WPF · `net10.0-windows`). 서버 배포 대상이 아니다.
-기본 편의 기능(트레이 · 단일 인스턴스 · 테마 · 언어 · 로그 · 설정 저장 · 시작 프로그램)의 본보기는 `JHJ_AI_USAGE` 다.
+★ **기본 편의 기능(트레이 · 단일 인스턴스 · 테마 · 언어 · 로그 · 설정 저장 · 시작 프로그램 · 단축키 · 외부 도구 열기 · 프로세스 실행)은
+`JHJ_CS_CORE` 가 갖는다** — 지도는 `JHJ_CS_CORE/200.Source/100.Core/README.md`,
+무엇이 공통이고 무엇이 이 앱 것인지는 `JHJ_CS_CORE/300.Docs/010.공통-전용-기능-구분.md` 다.
+⛔ **그 기능을 여기서 다시 구현하지 않는다** — 고칠 일이 생기면 Core 를 고치고 `JHJ_AI_USAGE` 까지 함께 빌드한다.
+계약: 지운 이름들(`ThemeManager`·`Loc`·`StartupRegistry`·`ProcessRunner`)은 각 프로젝트의 `GlobalUsings.cs` 가 Core 형식으로 잇고 있다.
 
 ## 2. 지켜야 할 것
 
@@ -29,8 +33,57 @@
 - 함정: `UseSerilog((context, services, logger) => …)` 는 로거를 **늦게** 만든다. `ILogger<T>` 를 아무도 주입받지 않으면
   끝내 안 만들어져 로그가 통째로 사라진다 — 이 앱은 2인자 overload 로 **코드에서 한 번만** 설정한다(`App.Configure`).
 - 계약: XAML 의 색은 전부 `DynamicResource`, 문구는 `{loc:Tr '한국어 원문'}` 이다. 새 문구는 `Localization/LocStrings.cs` 에 한 줄 더한다.
-  ⚠️ `JHJ_AI_USAGE` 는 **영어가 키**다 — 이 앱은 방향이 반대다. 섞어 쓰지 않는다.
+  ⚠️ `JHJ_AI_USAGE` 는 **영어가 키**다 — 이 앱은 방향이 반대다. 섞어 쓰지 않는다(`LocCatalog` 가 양쪽을 다 받는다).
+  계약: 브러시 키·팔레트 정본은 Core 의 `Theme/JhjTheme.cs` 다. 저장소 상태 색(`BehindBrush`·`AheadBrush`)은
+  `App.AddGitBrushes` 가 공통 뜻 색(`InfoBrush`·`WarnBrush`)에 이름만 붙인 것이다.
+- ★ 계약: **모양의 정본은 `Styles.xaml` 하나다** — 창 XAML 은 거기 정의된 Style·Geometry 만 쓰고 색·크기를 직접 적지 않는다.
+  스크롤바·체크박스·콤보박스·말풍선·진행막대는 **템플릿을 새로 씌웠다**(Windows 기본은 어두운 테마에서 밝은 회색으로 남는다).
+- 함정: 알약 모서리를 `CornerRadius="999"` 로 주면 WPF 가 가로까지 둥글려 **타원**이 된다 — `Pill`(16)·`PillSm`(9)·`PillXs`(3) 중에서 고른다.
+- 함정: 글상자의 흐린 안내 문구(`Tag`)는 **바인딩으로** 켠다 — `ControlTemplate.Triggers` 의 `DataTrigger`(`Text` = "")는 켜지지 않았다.
+- 계약: 설정 창의 고르는 상자는 **내부 키를 그대로 보이지 않는다** — `ThemeLabel`·`PaletteLabel`·`LanguageLabel`·`ScaleLabel` 컨버터를 거친다.
+- 계약: 명암·색·배율·언어는 **고르는 즉시** 비친다(`SettingsViewModel` 의 감싼 속성). 「적용」은 저장이다.
+  `AppSettings` 는 알림이 없는 보통 객체라 **감싸지 않으면 가로챌 수 없다.**
+- 계약: 창이 직접 그리는 설정(배율·작업 로그 단)은 `MainViewModel.NotifyDisplaySettingsChanged()` → `MainWindow.ApplyDisplaySettings()` 로 전해진다.
+- 계약: **Windows 제목 표시줄을 쓰지 않는다** — `WindowChrome`(CaptionHeight 0)으로 떼고 창 제어줄이 끌기·최대화·시스템 메뉴를 맡는다.
+  `WindowStyle="None"` 으로 바꾸지 않는다 — 스냅·가장자리 크기 조절·그림자를 잃는다.
+  ⚠️ 창 단추 옆에 앱 단추를 두지 않는다 — 성격이 다른 둘이 한 줄에 섞이면 어색하다(2026-10-10 사용자 지적).
+- ★ 함정: `TabControl` 템플릿의 내용 자리는 반드시 **`x:Name="PART_SelectedContentHost"`** 다 —
+  없으면 고른 탭의 내용이 **접근성 트리에 통째로 안 올라간다**(화면 낭독기도 UI 자동화도 못 읽는다. 2026-10-10 실측).
+- 계약: 오른쪽 단은 **「변경 내용」·「작업 로그」 두 탭**이다. 가운데에서 변경 파일을 고르면 `SelectedChange` 가 바뀌고 0번 탭으로 옮긴다.
+  계약: 이 단은 **접힌 채(손잡이만)로 시작한다** — `MainViewModel.IsRightPanelOpen` 이 펴고, 변경 파일을 누르면 저절로 펴진다.
+  설정 「작업 로그 단」을 끄면 손잡이까지 숨는다(`MainWindow.ApplyDisplaySettings`).
+- 계약: 화면은 **제목 띠의 탭 둘**이다 — 0 「대시보드」 · 1 「저장소 관리」(`MainViewModel.PageIndex`, 마지막 화면은 `Settings.StartPage`).
+  제목 띠는 **테마와 무관하게 짙다** — 띠 위의 글자·단추는 테마 브러시가 아니라 `Styles.xaml` 의 `Title*` 브러시를 쓴다.
+- ★ 계약: 저장소 목록은 **`RepoRow.GroupNode` 객체로 묶인다**(`PropertyGroupDescription`) — 그룹 머리가 `{Binding Name.…}` 으로 접힘·건수를 읽는다.
+  `ApplyFilter` 가 `Rows` 에 넣기 전에 줄마다 `GroupNode` 를 채우고 **그룹별로 모아 세워** 넣는다(묶인 목록의 그룹 차례는 처음 나온 줄 차례다).
+  함정: 묶인 `ListBox` 는 `ScrollViewer.CanContentScroll="False"` 여야 한다 — 켜 두면 그룹 단위로 뚝뚝 넘어간다.
+- 계약: 대시보드의 카드·줄은 **건너가는 길**이다 — `GoToState`·`GoToGroup`·`GoToRepo` 가 거르개를 맞추고 1번 화면으로 옮긴다.
+  계약: 건너갈 때는 남아 있던 검색어·거르개를 먼저 푼다(`ResetFilters`) — 겹치면 빈 목록으로 보인다.
+- 계약: 대시보드는 `Views/DashboardView` 한 파일이다 — 통계 카드 여덟의 수는 `MainViewModel.Dashboard.cs`, 그림은 `Controls/ChartView`(라이브러리 없이 직접 그린다)가 맡는다.
+  표시 방식은 카드 머리 고르개가 바꾸고 **고르는 즉시** `Settings.DashboardChartKinds` 에 남는다. 범주 색은 여덟 고정 — 넘치면 자료 쪽이 「기타」로 접는다.
+- 계약: 「상태 새로 고침」은 저장소마다 git 을 두 번 더 부른다 — 바뀐 것이 있을 때만 `diff HEAD --shortstat`(추가·삭제 줄 수), 늘 `log --since=735.days.ago --format=%cs`(커밋 캘린더 — 가장 긴 기간 2년치).
+  함정: 줄 수는 추적 전 새 파일을 세지 않는다 — 세려면 파일을 다 읽어야 해서 일부러 뺐다. 캘린더는 지금 브랜치의 커밋만, 작성자를 가르지 않고 센다.
+- 계약: 카드 크기는 **「UI 편집」 중에만** 바뀐다 — 나누개(`LayoutSplitter`)는 평소 꺼진 빈 간격이고, 「배치 저장」이 별(*) 비율을 `Settings.DashboardLayout` 에 적는다.
+  함정: 격자의 짝수 자리가 카드, 홀수 자리가 나누개다 — 카드를 더하면 `DashboardView.xaml.cs` 의 `Defaults` 칸 수도 함께 고친다(안 맞는 저장값은 버려진다).
+- ★ 계약: 일괄 작업·그룹 옮기기·숨기기는 **보이는 줄 중 고른 것**에만 돈다(`SelectedShown`) — 거르개에 가려진 저장소는 체크돼 있어도 건드리지 않는다.
+  「고른 수 / 보이는 수」 칩도 같은 기준이다. 대시보드 「대표 상태 분포」는 저장소를 `StateText` 하나로 세어 현황 칸(겹쳐 셈)과 수가 다르다.
+- ★ 계약: 충돌 탭은 **구간마다 고르고 적용**한다 — 판정은 `ConflictResolver`(글자만 다룬다), 쓰기·스테이지는 `GitService.ResolveConflictAsync` 다.
+  자동(`IsCertain`)은 넷뿐이다: 양쪽이 같음 · 공백만 다름 · 한쪽만 바꿈 · 서로 다른 줄을 고침(`TryMergeLines`). 자동도 **미리 골라 두기만** 하고 파일은 「적용」을 눌러야 바뀐다.
+- 계약: 충돌 내용은 작업 파일이 아니라 **인덱스 세 단계**로 다시 만든다(`checkout-index --stage=all --temp` → `merge-file --diff3`) — 공통 조상이 있어야 자동 판정을 한다.
+  함정: 그 결과는 **바이트로** 읽고 Latin1 로 줄만 골라 다시 쓴다 — 글자로 풀면 UTF-8 이 아닌 파일·CRLF 가 조용히 바뀐다.
+- 계약: 적용 전의 작업 파일은 `.git/jhj-conflict-backup/<때>/` 에 남긴다. 한쪽이 지운 파일·바이너리는 앱에서 풀지 않는다(`CanResolve` false).
+  「병합 마무리」는 **병합(MERGE_HEAD)일 때만** `commit --no-edit` 을 한다 — 리베이스·체리픽 이어 가기는 넣지 않았다.
+- 함정: 추적 전 파일은 `git diff` 가 빈 결과를 낸다 — `--no-index` 로 `/dev/null` 과 견준다(`NUL` 로 바꾸면 안 읽는다).
+- 계약: 그룹은 **사용자가 지정한 것(`Settings.RepoGroups`)이 스캔이 매긴 폴더 이름을 덮는다.** 그룹을 지워도 저장소는 남는다.
+- 계약: 줄마다 `RefreshedAt` 을 찍는다 — 「상태 새로 고침」이 값을, 1분 타이머가 경과 글자(`TouchElapsed`)를 다시 그린다.
+- ★ 함정: 아이콘 `.ico` 는 **128 이하를 BMP 로** 적어야 한다 — Pillow 12 의 ICO 저장은 전부 PNG 로 눌러 담고,
+  Windows 의 작은 아이콘 경로(작업 표시줄·Alt+Tab)가 그것을 못 읽어 기본 아이콘이 뜬다.
+  생성기 `JHJ_DEV/000.AGENTS_MD/070.아이콘/make_jhj_icon.py` 의 `write_ico()` 가 맡는다(2026-10-10 수정).
 - 계약: 실행 파일·데이터 폴더·시작 프로그램 값·뮤텍스 이름은 모두 **`JHJ_Git-Center`** 하나다. 바꿀 때는 이사 코드를 함께 넣는다.
+  작업 관리자에 보이는 이름(`AssemblyTitle`)도 **`JHJ` 로 시작한다** — `JHJ Git 통합 관리 센터`(2026-10-10).
+- 계약: 전역 단축키는 **`Ctrl+Alt+3`** 이다 — 자리표 정본은 `JHJ_DEV/000.AGENTS_MD/060.단축키/060.단축키-대장.md`.
+  기본값은 `AppSettings.DefaultHotkey` 한 곳이고, `Services/HotkeyService` 의 정적 생성자가 Core 의 되살림 값에도 넣는다.
+  계약: 이미 `Ctrl+Alt+G` 를 저장한 PC 는 `JsonSettingsStore.WithDefaults` 가 **읽을 때 한 번** 새 기본값으로 옮긴다.
 - 계약: 배포 버전은 `Directory.Build.props` 의 `VersionPrefix` 세 자리만 올린다 — 네 번째(빌드 날짜)는 빌드가 붙인다.
 - ⛔ **버전 올리기·릴리스 생성·태그 push 는 사용자 지시가 있을 때만** 한다.
 - 빌드 전에 **이 폴더에서 띄운** `JHJ_Git-Center` 만 종료한다(`bin\` 잠금).
@@ -39,9 +92,12 @@
 
 ```text
 빌드      dotnet build 200.Source\GitCenter.slnx -c Release --nologo -v q     (경고 0 · 오류 0)
+Core      ..\JHJ_CS_CORE 를 나란히 받아 둬야 빌드된다 — 없으면 무엇을 하라는 오류 한 줄이 난다
 게시      800.Deploy\Build-Exe.bat
 git 계층  임시 저장소(bare origin + 작업 사본 2개)를 만들어 Fetch·Commit·Push·Pull·충돌·되돌리기를 실제로 돌린다
-화면      앱을 띄워 PrintWindow 로 창을 찍어 본다 — 빌드 통과는 화면 검증이 아니다
+화면      앱을 띄워 PrintWindow(flags=2) 로 창을 찍어 본다 — 빌드 통과는 화면 검증이 아니다
+          설정 창은 모달이라 UIA 의 창 열거에 안 잡힌다 — EnumWindows 로 「소유자가 있는 보이는 창」을 찾는다
+          캡처 스크립트는 ASCII 로만 적는다 — PowerShell 5.1 은 BOM 없는 한글에서 파서가 무너진다
 ```
 
 ⚠️ **검증에 사용자의 실제 저장소로 fetch·push 를 돌리지 않는다.** 원격이 필요한 검증은 **로컬 bare 저장소**로 한다.

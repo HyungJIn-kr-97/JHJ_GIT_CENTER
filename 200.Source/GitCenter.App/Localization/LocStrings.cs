@@ -1,8 +1,12 @@
+using Jhj.Core.Wpf.Localization;
+
 namespace GitCenter.App.Localization;
 
 /// <summary>
 /// 한국어 원문 → 영어. 화면에 새 문구를 넣으면 여기에 한 줄 더한다.
 /// 계약: 없는 키는 한국어가 그대로 나간다 — 빠뜨려도 화면이 깨지지는 않는다.
+/// 계약: 이 앱은 **한국어가 키**다(JHJ_AI_USAGE 는 영어가 키다) — 한 앱 안에서 방향을 섞지 않는다.
+/// 계약: App 시작 때 Loc.Register(LocStrings.Catalog) 를 한 번 부른다.
 /// </summary>
 internal static class LocStrings
 {
@@ -27,6 +31,82 @@ internal static class LocStrings
         ["검색"] = "Search",
         ["저장소 추가"] = "Add repository",
         ["목록에서 숨기기"] = "Hide from list",
+        ["변경된 것만 선택"] = "Select changed",
+        ["이름 · 묶음 · 경로로 검색"] = "Search name, group or path",
+        ["변경·충돌·앞섬·뒤처짐이 있는 저장소만 남깁니다"] = "Keep only repositories with changes, conflicts, ahead or behind",
+        ["고른 저장소를 목록에서 숨깁니다 — 설정에서 되살립니다"] = "Hide the selected repositories; restore them in Settings",
+        ["지우기"] = "Clear",
+        ["자세히"] = "Details",
+
+        // 화면 탭 · 대시보드
+        ["대시보드"] = "Dashboard",
+        ["UI 편집"] = "Edit layout",
+        ["병합 마무리"] = "Conclude merge",
+        ["고른 것 모두 적용"] = "Apply all chosen",
+        ["이 파일 적용"] = "Apply this file",
+        ["자동"] = "Auto",
+        ["내 것"] = "Ours",
+        ["상대 것"] = "Theirs",
+        ["둘 다"] = "Both",
+        ["합치기"] = "Merge lines",
+        ["합친 결과"] = "Merged result",
+        ["내 것 (지금 브랜치)"] = "Ours (current branch)",
+        ["상대 것 (들어오는 쪽)"] = "Theirs (incoming)",
+        ["자동으로 풀 수 있는 구간은 미리 골라 두었습니다. 나머지를 고른 뒤 적용해 주십시오."] = "Auto-resolvable hunks are preselected. Choose the rest, then apply.",
+        ["UI 편집 중 · 카드 사이 손잡이로 크기 조절"] = "Editing layout · drag the handles between cards",
+        ["기본 배치"] = "Default layout",
+        ["배치 저장"] = "Save layout",
+        ["표시 방식"] = "Display type",
+        ["기간"] = "Period",
+        ["카드 크기를 조절하고 그 배치를 저장합니다"] = "Resize the cards and save that layout",
+        ["처음 배치 비율로 되돌립니다 — 저장을 눌러야 남습니다"] = "Back to the default proportions — press Save to keep it",
+        ["취소"] = "Cancel",
+        ["저장소 관리"] = "Repositories",
+        ["그룹별 현황"] = "By group",
+        ["대표 상태 분포"] = "Primary status breakdown",
+        ["저장소마다 가장 급한 상태 하나로 셉니다 — 위 현황 칸과 수가 다를 수 있습니다"] = "Each repository is counted once, by its most urgent status — totals can differ from the tiles above",
+        ["확인 필요 저장소"] = "Needs attention",
+        ["확인할 저장소가 없습니다."] = "Nothing needs attention.",
+        ["최근 커밋"] = "Recent commits",
+        ["읽은 커밋이 없습니다."] = "No commits read yet.",
+        ["최근 작업"] = "Recent activity",
+        ["이 상태의 저장소 보기"] = "Show repositories in this state",
+        ["이 그룹의 저장소 보기"] = "Show this group's repositories",
+
+        // 저장소 목록 — 그룹 · 거르개 · 정렬
+        ["고른 수 / 보이는 수"] = "Selected / shown",
+        ["그룹 안 정렬 바꾸기 — 이름 · 상태 · 최근 커밋"] = "Change sort within groups: name, status, recent commit",
+        ["그룹 모두 펴기"] = "Expand all groups",
+        ["그룹 모두 접기"] = "Collapse all groups",
+        ["거르개 풀기"] = "Clear filters",
+        ["그룹 머리를 누르면 접고 폅니다"] = "Click a group header to collapse or expand",
+        ["이 상태의 저장소만 보기 — 다시 누르면 전체"] = "Show only this state; click again for all",
+        ["이 그룹의 저장소를 모두 고르거나 풉니다"] = "Select or clear every repository in this group",
+        ["문제·충돌이 있는 저장소"] = "Repositories with problems or conflicts",
+        ["받을 것이 있는 저장소"] = "Repositories with commits to pull",
+        ["올릴 것이 있는 저장소"] = "Repositories with commits to push",
+        ["변경이 있는 저장소"] = "Repositories with changes",
+        ["올릴 커밋 수"] = "Commits to push",
+        ["받을 커밋 수"] = "Commits to pull",
+        ["경로 복사"] = "Copy path",
+        ["브랜치 이름 복사"] = "Copy branch name",
+        ["이 단 접기"] = "Collapse this panel",
+        ["변경 내용 · 작업 로그 펴기"] = "Expand changes and activity",
+        ["최소화"] = "Minimize",
+        ["변경 내용"] = "Diff",
+        ["읽는 중…"] = "Reading…",
+        ["가운데 「변경 파일」에서 파일을 누르면 바뀐 내용이 여기에 보입니다."] = "Pick a file under \"Changed files\" to see its diff here.",
+        ["그룹"] = "Group",
+        ["이 그룹만 보기 — 다시 누르면 전체"] = "Show only this group; click again for all",
+        ["고른 저장소를 그룹으로 옮깁니다"] = "Move the selected repositories into a group",
+        ["고른 저장소를 옮길 그룹"] = "Move selected repositories to",
+        ["새 그룹 이름"] = "New group name",
+        ["새 그룹으로 옮기기"] = "Move to new group",
+        ["그룹에서 빼기"] = "Remove from group",
+        ["이 그룹을 지웁니다 — 저장소는 남습니다"] = "Delete this group (repositories stay)",
+        ["최대화"] = "Maximize",
+        ["이전 크기로"] = "Restore",
+        ["닫기 — 트레이에 남습니다"] = "Close (stays in the tray)",
 
         // 단추 — 일괄 작업
         ["전체 Fetch"] = "Fetch all",
@@ -39,6 +119,14 @@ internal static class LocStrings
         ["커밋 + 올리기"] = "Commit and push",
         ["병합 되돌리기"] = "Abort merge",
         ["멈추기"] = "Stop",
+        ["받기"] = "Pull",
+        ["올리기"] = "Push",
+        ["원격만 읽습니다 — 작업 트리를 건드리지 않습니다"] = "Reads the remote only; the working tree is untouched",
+        ["체크아웃을 바꾸지 않고 기본 브랜치만 빨리감기로 갱신합니다"] = "Fast-forwards the default branch without changing the checkout",
+        ["origin/기본브랜치를 지금 브랜치로 병합합니다 — 충돌하면 멈추고 알려 줍니다"] = "Merges origin/default into the current branch; stops and reports on conflict",
+        ["뒤처진 브랜치만 빨리감기로 갱신하고, 갈라진 것은 건너뜁니다"] = "Fast-forwards behind branches only; diverged ones are skipped",
+        ["진행 중인 병합·리베이스를 취소합니다"] = "Aborts the merge or rebase in progress",
+        ["한 줄로 적습니다 — 고른 저장소에 모두 같은 메시지로 들어갑니다"] = "One line; every selected repository gets the same message",
 
         // 열 이름
         ["이름"] = "Name",
@@ -61,10 +149,41 @@ internal static class LocStrings
         ["GitHub Desktop 에서 열기"] = "Open in GitHub Desktop",
         ["VS Code 에서 열기"] = "Open in VS Code",
         ["원격 페이지 열기"] = "Open remote page",
+        ["폴더"] = "Folder",
+        ["터미널"] = "Terminal",
+        ["원격 페이지"] = "Remote",
+
+        // 설정 — 고르는 상자의 값(내부 키를 그대로 보이지 않는다)
+        ["밝게"] = "Light",
+        ["어둡게"] = "Dark",
+        ["Windows 설정 따름"] = "Follow Windows",
+        ["보라"] = "Violet",
+        ["남색"] = "Navy",
+        ["빨강"] = "Red",
+        ["초록"] = "Emerald",
+        ["회색"] = "Slate",
         ["커밋 메시지"] = "Commit message",
+        ["받는 브랜치"] = "Receive branch",
+        ["올리는 브랜치"] = "Push branch",
+        ["기본 브랜치"] = "Default branch",
+        ["지금 브랜치"] = "Current branch",
+        ["필터"] = "Filter",
+        ["작업 중만 선택"] = "Select working only",
+        ["작업 중 표시"] = "Mark as working",
+        ["작업 중으로 찍은 저장소"] = "Marked as working",
+        ["커밋 내역"] = "Commits",
+        ["웹에서 보기"] = "Open on web",
+        ["저장소 보기"] = "Show repository",
+        ["커밋 제목"] = "Commit subject",
+        ["메시지"] = "Message",
+        ["커밋 첫 줄 — 고른 저장소에 모두 같은 제목으로 들어갑니다"] = "First line — every selected repository gets the same subject",
+        ["커밋 본문 — 비우면 제목만 들어갑니다"] = "Body — leave empty to commit with the subject only",
         ["닫기"] = "Close",
         ["적용"] = "Apply",
         ["기본값으로"] = "Reset",
         ["선택 %d개"] = "%d selected"
     };
+
+    // 함정: English 보다 **뒤**에 둔다 — 앞에 두면 정적 초기화 순서 때문에 빈 사전이 넘어간다
+    public static LocCatalog Catalog { get; } = LocCatalog.Of(Loc.Korean, Loc.English, English);
 }

@@ -6,6 +6,8 @@ using GitCenter.App.Services;
 using GitCenter.Application.Abstractions;
 using GitCenter.Application.Settings;
 using GitCenter.Infrastructure.GitHubDesktop;
+using Jhj.Core.App;
+using Jhj.Core.Wpf.Shell;
 using Microsoft.Win32;
 using Serilog;
 
@@ -52,6 +54,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         StartAtLogin = StartupRegistry.IsRegistered() && !StartupRegistry.IsDisabledByTaskManager();
+        LoadIconChoices();
     }
 
     public AppSettings Settings { get; }
@@ -68,9 +71,191 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<string> Palettes => ThemeManager.PaletteNames;
 
-    public IReadOnlyList<string> Themes { get; } = [ThemeManager.SystemMode, ThemeManager.Light, ThemeManager.Dark];
+    public IReadOnlyList<string> Themes => ThemeManager.ThemeNames;
 
     public IReadOnlyList<string> Languages { get; } = [Loc.Korean, Loc.English];
+
+    /// 계약: 화면 배율 선택지 — AppSettings.UiScale 과 MainWindow 의 조임 범위(0.8~1.5) 안이어야 한다
+    public IReadOnlyList<double> Scales { get; } = [0.9, 1.0, 1.1, 1.25];
+
+    // ── 모양 — 고르는 즉시 화면에 비친다 ──────────────────────
+    // 왜: 색을 고르고 「적용」을 눌러야 보이면 다섯 가지를 비교하려고 다섯 번 저장하게 된다.
+    //     Settings 는 알림이 없는 보통 객체라 이렇게 감싸야 바뀐 것을 가로챌 수 있다.
+
+    public string Theme
+    {
+        get => Settings.Theme;
+        set
+        {
+            if (Settings.Theme == value)
+            {
+                return;
+            }
+
+            Settings.Theme = value;
+            OnPropertyChanged();
+            PreviewTheme();
+        }
+    }
+
+    public string Palette
+    {
+        get => Settings.Palette;
+        set
+        {
+            if (Settings.Palette == value)
+            {
+                return;
+            }
+
+            Settings.Palette = value;
+            OnPropertyChanged();
+            PreviewTheme();
+            // 왜: 견본 색은 지금 명암에서 뽑는다 — 팔레트가 바뀌면 목록의 동그라미도 다시 그려야 한다
+            OnPropertyChanged(nameof(Palettes));
+        }
+    }
+
+    public string Language
+    {
+        get => Settings.Language;
+        set
+        {
+            if (Settings.Language == value)
+            {
+                return;
+            }
+
+            Settings.Language = value;
+            OnPropertyChanged();
+            Loc.SetLanguage(value);
+        }
+    }
+
+    public double UiScale
+    {
+        get => Settings.UiScale;
+        set
+        {
+            if (Math.Abs(Settings.UiScale - value) < 0.001)
+            {
+                return;
+            }
+
+            Settings.UiScale = value;
+            OnPropertyChanged();
+            _main.NotifyDisplaySettingsChanged();
+        }
+    }
+
+    public bool CompactRows
+    {
+        get => Settings.CompactRows;
+        set
+        {
+            if (Settings.CompactRows == value)
+            {
+                return;
+            }
+
+            Settings.CompactRows = value;
+            OnPropertyChanged();
+            _main.NotifyDisplaySettingsChanged();
+        }
+    }
+
+    public bool ShowActivityPanel
+    {
+        get => Settings.ShowActivityPanel;
+        set
+        {
+            if (Settings.ShowActivityPanel == value)
+            {
+                return;
+            }
+
+            Settings.ShowActivityPanel = value;
+            OnPropertyChanged();
+            _main.NotifyDisplaySettingsChanged();
+        }
+    }
+
+    private void PreviewTheme() => ThemeManager.ApplyPreference(Settings.Palette, Settings.Theme);
+
+    // ── 아이콘 — 내장 · 앱이 그리는 모양 · 불러온 그림 ─────────
+    // 규격 — JHJ_DEV/000.AGENTS_MD/080.CS앱-화면/080.CS앱-화면-공통.md §2
+
+    /// 계약: 고르는 상자의 줄 — 내장("") · 모양("preset:키") · 불러온 그림이 있으면 그 경로 한 줄
+    public ObservableCollection<string> IconChoices { get; } = [];
+
+    public string IconChoice
+    {
+        get => Settings.AppIcon;
+        set
+        {
+            // 함정: 목록을 다시 채우는 동안 ComboBox 가 null 을 되돌려 보낸다 — 고른 것이 풀리지 않게 흘려보낸다
+            if (value is null || Settings.AppIcon == value)
+            {
+                return;
+            }
+
+            Settings.AppIcon = value;
+            OnPropertyChanged();
+            AppIcon.Apply(value);
+        }
+    }
+
+    private void LoadIconChoices()
+    {
+        IconChoices.Clear();
+        IconChoices.Add(AppIcon.BuiltIn);
+        foreach (var preset in AppIcon.Presets)
+        {
+            IconChoices.Add(AppIcon.PresetPrefix + preset.Key);
+        }
+
+        var current = AppIcon.Normalize(Settings.AppIcon);
+        if (!IconChoices.Contains(current))
+        {
+            IconChoices.Add(current);
+        }
+
+        Settings.AppIcon = current;
+        OnPropertyChanged(nameof(IconChoice));
+    }
+
+    [RelayCommand]
+    private void ImportIcon()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "아이콘으로 쓸 그림을 고르십시오",
+            Filter = "그림 (*.png;*.ico;*.jpg;*.jpeg;*.bmp)|*.png;*.ico;*.jpg;*.jpeg;*.bmp",
+        };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            // 왜: 원본을 옮기거나 지워도 아이콘이 남도록 데이터 폴더에 사본을 둔다
+            // 함정: 같은 이름으로 덮으면 이미 읽어 둔 그림이 안 바뀐 것처럼 보인다 — 이름에 시각을 붙인다
+            var folder = AppPaths.Ensure(System.IO.Path.Combine(AppPaths.Data, "icons"));
+            var name = $"custom-{DateTime.Now:yyyyMMdd-HHmmss}{System.IO.Path.GetExtension(dialog.FileName).ToLowerInvariant()}";
+            var dest = System.IO.Path.Combine(folder, name);
+            System.IO.File.Copy(dialog.FileName, dest, overwrite: true);
+
+            Settings.AppIcon = dest;
+            LoadIconChoices();
+            AppIcon.Apply(dest);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "아이콘 그림을 가져오지 못했습니다");
+            TestResult = "그림을 가져오지 못했습니다: " + ex.Message;
+        }
+    }
 
     [ObservableProperty]
     private bool _startAtLogin;
@@ -247,8 +432,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         StartupRegistry.Set(StartAtLogin);
         Settings.StartAtLogin = StartAtLogin;
 
-        ThemeManager.Apply(Settings.Palette, ThemeManager.ResolveIsDark(Settings.Theme));
+        ThemeManager.ApplyPreference(Settings.Palette, Settings.Theme);
         Loc.SetLanguage(Settings.Language);
+        _main.NotifyDisplaySettingsChanged();
 
         try
         {
@@ -278,8 +464,11 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         if (group is SettingsGroup.Display)
         {
-            ThemeManager.Apply(Settings.Palette, ThemeManager.ResolveIsDark(Settings.Theme));
+            ThemeManager.ApplyPreference(Settings.Palette, Settings.Theme);
             Loc.SetLanguage(Settings.Language);
+            LoadIconChoices();
+            AppIcon.Apply(Settings.AppIcon);
+            _main.NotifyDisplaySettingsChanged();
         }
     }
 }

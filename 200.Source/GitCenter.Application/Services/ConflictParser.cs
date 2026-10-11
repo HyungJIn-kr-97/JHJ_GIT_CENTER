@@ -4,7 +4,7 @@ namespace GitCenter.Application.Services;
 
 /// <summary>
 /// 충돌 표식이 박힌 파일에서 「어디가 충돌인지」를 뽑는다.
-/// 계약: 파일을 고치지 않는다 — 읽어서 보여줄 뿐이고, 고르기·합치기는 사용자가 편집기에서 한다.
+/// 계약: 파일을 고치지 않는다 — 읽어서 보여줄 뿐이다(고른 대로 다시 짜는 것은 ConflictResolver).
 /// 함정: diff3 설정이면 ours 와 theirs 사이에 공통 조상(|||||||) 구역이 하나 더 있다.
 /// </summary>
 public static class ConflictParser
@@ -15,7 +15,7 @@ public static class ConflictParser
     private const string End = ">>>>>>>";
 
     /// 계약: 한 덩어리가 이보다 길면 잘라서 보여준다 — 화면이 멈추지 않게
-    private const int MaxLinesPerSide = 400;
+    public const int MaxLinesPerSide = 400;
 
     public static ConflictFile Parse(string path, string content)
     {

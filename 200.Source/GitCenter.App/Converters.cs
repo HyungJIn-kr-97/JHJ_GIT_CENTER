@@ -1,7 +1,9 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using GitCenter.App.Localization;
+using GitCenter.App.Services;
 using GitCenter.App.ViewModels;
 using GitCenter.Core.Models;
 
@@ -118,11 +120,20 @@ public sealed class BoolToVisibilityConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
 }
 
-/// <summary>빈 문자열·null 이면 숨긴다.</summary>
+/// <summary>빈 문자열·null 이면 숨긴다. ConverterParameter="invert" 면 반대 — 빈 칸일 때만 보인다.</summary>
+/// 계약: invert 쪽이 글상자의 흐린 안내 문구(placeholder)를 켜고 끈다
 public sealed class EmptyToVisibilityConverter : IValueConverter
 {
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        string.IsNullOrWhiteSpace(value as string) ? Visibility.Collapsed : Visibility.Visible;
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var visible = !string.IsNullOrWhiteSpace(value as string);
+        if (parameter is string s && s.Equals("invert", StringComparison.OrdinalIgnoreCase))
+        {
+            visible = !visible;
+        }
+
+        return visible ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
 }
@@ -178,4 +189,184 @@ public sealed class LinesConverter : IValueConverter
         value is IEnumerable<string> lines ? string.Join(Environment.NewLine, lines) : string.Empty;
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>명암 키("system"·"light"·"dark") → 사람이 읽는 이름.</summary>
+/// 왜: 설정 창의 고르는 상자에 내부 키가 그대로 보이면 사용자가 무슨 뜻인지 알 수 없다
+public sealed class ThemeLabelConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => (value as string) switch
+    {
+        ThemeManager.Light => Loc.T("밝게"),
+        ThemeManager.Dark => Loc.T("어둡게"),
+        _ => Loc.T("Windows 설정 따름")
+    };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>팔레트 키 → 사람이 읽는 색 이름.</summary>
+public sealed class PaletteLabelConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => (value as string) switch
+    {
+        "violet" => Loc.T("보라"),
+        "navy" => Loc.T("남색"),
+        "bull" => Loc.T("빨강"),
+        "emerald" => Loc.T("초록"),
+        "slate" => Loc.T("회색"),
+        _ => value?.ToString() ?? string.Empty
+    };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>팔레트 키 → 지금 명암에서의 대표색 견본.</summary>
+public sealed class PaletteSwatchConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        ThemeManager.SwatchOf(value as string);
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>아이콘 선택값("" · "preset:키" · 파일 경로) → 고르는 상자에 보일 이름.</summary>
+public sealed class IconChoiceLabelConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var choice = value as string ?? string.Empty;
+        if (choice.Length == 0)
+        {
+            return Loc.T("기본 (JHJ)");
+        }
+
+        if (choice.StartsWith(Jhj.Core.Wpf.Shell.AppIcon.PresetPrefix, StringComparison.Ordinal))
+        {
+            var key = choice[Jhj.Core.Wpf.Shell.AppIcon.PresetPrefix.Length..];
+            var preset = Jhj.Core.Wpf.Shell.AppIcon.Presets.FirstOrDefault(p => p.Key == key);
+            return preset is null ? key : Loc.T(preset.Label);
+        }
+
+        return Loc.T("불러온 그림");
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>아이콘 선택값 → 견본 그림. 계약: 견본은 40px 로 그려 20 DIP 자리에 넣는다 — 배율 200% 까지 또렷하다.</summary>
+public sealed class IconChoicePreviewConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        Jhj.Core.Wpf.Shell.AppIcon.Preview(value as string, 40);
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>언어 키("ko"·"en") → 그 언어로 적은 이름.</summary>
+/// 계약: 언어 이름은 번역하지 않는다 — 읽을 줄 모르는 언어로 보이면 되돌아올 수 없다
+public sealed class LanguageLabelConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => (value as string) switch
+    {
+        Loc.English => "English",
+        _ => "한국어"
+    };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>화면 배율 → "100%" 꼴.</summary>
+public sealed class ScaleLabelConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is double scale ? $"{scale * 100:0}%" : string.Empty;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>「목록을 조밀하게」 설정 → 목록 한 줄의 Style.</summary>
+/// 함정: ItemContainerStyle 은 Style 객체를 받는다 — 바인딩으로 바꾸려면 여기서 리소스를 찾아 돌려줘야 한다
+public sealed class RowStyleConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var key = value is true ? "ListRowCompact" : "ListRow";
+        return System.Windows.Application.Current?.TryFindResource(key) as Style;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>diff 한 줄의 종류 → 그 줄 바탕색.</summary>
+/// 왜: 더한 줄·지운 줄을 글자색만으로 가르면 긴 파일에서 한눈에 안 들어온다 — 줄 전체에 옅은 바탕을 깐다
+public sealed class DiffBackConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var key = value switch
+        {
+            DiffLineKind.Added => "DiffAddBackBrush",
+            DiffLineKind.Removed => "DiffDelBackBrush",
+            DiffLineKind.Hunk => "SubtleOverlayBrush",
+            _ => null
+        };
+
+        return key is null ? Brushes.Transparent : StateBrushConverter.Lookup(key);
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>diff 한 줄의 종류 → 글자색.</summary>
+public sealed class DiffForeConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var key = value switch
+        {
+            DiffLineKind.Added => "OkBrush",
+            DiffLineKind.Removed => "DangerBrush",
+            DiffLineKind.Hunk => "TextFaintBrush",
+            _ => "TextSecondaryBrush"
+        };
+
+        return StateBrushConverter.Lookup(key);
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>diff 한 줄의 종류 → 줄 앞에 붙는 부호 한 글자.</summary>
+public sealed class DiffSignConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
+    {
+        DiffLineKind.Added => "+",
+        DiffLineKind.Removed => "−",
+        DiffLineKind.Hunk => "@",
+        _ => " "
+    };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>번호가 ConverterParameter 와 같으면 보인다 — 제목 띠의 탭이 고른 화면만 남긴다.</summary>
+public sealed class IndexToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value?.ToString() == parameter?.ToString() ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+/// <summary>번호가 ConverterParameter 와 같으면 true — 탭(RadioButton)의 IsChecked 를 번호 하나에 잇는다.</summary>
+/// 계약: 꺼지는 쪽(false)은 되돌려 보내지 않는다 — 켜지는 탭 하나만 번호를 바꾼다
+public sealed class IndexToBoolConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value?.ToString() == parameter?.ToString();
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is true && int.TryParse(parameter?.ToString(), out var index) ? index : Binding.DoNothing;
 }

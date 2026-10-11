@@ -65,15 +65,33 @@ public interface IGitService
 
     Task<IReadOnlyList<ConflictFile>> ReadConflictsAsync(RepoEntry repo, CancellationToken cancellationToken);
 
+    /// 계약: 한 파일의 변경 내용 — 읽기뿐이라 작업 트리를 건드리지 않는다
+    Task<FileDiff> ReadDiffAsync(RepoEntry repo, FileChange change, CancellationToken cancellationToken);
+
     Task<BulkStepResult> ExecuteAsync(RepoEntry repo, BulkOperationKind kind, BulkOperationOptions options, CancellationToken cancellationToken);
 
     Task<string?> ReadDefaultBranchAsync(RepoEntry repo, CancellationToken cancellationToken);
+
+    /// 계약: 지금 브랜치에서 최근 days 일 동안의 커밋 날짜 — 커밋 하나에 날짜 하나다(로컬만 읽는다)
+    Task<IReadOnlyList<DateOnly>> ReadCommitDaysAsync(RepoEntry repo, int days, CancellationToken cancellationToken);
+
+    /// 계약: 커밋한 날이 from~to(양끝 포함)인 지금 브랜치의 커밋을 새것부터 준다 — 읽기뿐이다
+    Task<IReadOnlyList<CommitInfo>> ReadCommitsAsync(RepoEntry repo, DateOnly from, DateOnly to, CancellationToken cancellationToken);
+
+    /// 계약: 구간마다 고른 대로 파일을 다시 써서 스테이지한다 — 쓰기 전의 작업 파일은 .git 안에 백업한다
+    Task<ConflictActionResult> ResolveConflictAsync(RepoEntry repo, string path, IReadOnlyList<ConflictChoice> choices, CancellationToken cancellationToken);
+
+    /// 계약: 충돌이 다 풀린 병합을 커밋으로 맺는다 — 병합 중일 때만 하고 리베이스·체리픽은 건드리지 않는다
+    Task<ConflictActionResult> ConcludeMergeAsync(RepoEntry repo, CancellationToken cancellationToken);
 }
 
 /// <summary>일괄 작업에 넘기는 값 — 커밋 메시지처럼 작업마다 다른 것만 담는다.</summary>
 public sealed class BulkOperationOptions
 {
     public string CommitMessage { get; set; } = string.Empty;
+
+    /// 계약: 커밋의 본문이다 — 비면 제목(CommitMessage)만 들어간다
+    public string CommitBody { get; set; } = string.Empty;
 
     /// 계약: Push 는 언제나 upstream 없는 브랜치에 -u 를 붙인다. force 는 어디에서도 쓰지 않는다
     public bool SetUpstreamOnPush { get; set; } = true;
@@ -83,6 +101,12 @@ public sealed class BulkOperationOptions
     public bool AutoStash { get; set; }
 
     public string RemoteName { get; set; } = "origin";
+
+    /// 계약: 「받기」·「현재로 병합」이 가져올 원격 브랜치 — 비면 그 저장소의 기본 브랜치를 찾아 쓴다
+    public string ReceiveBranch { get; set; } = string.Empty;
+
+    /// 계약: 「올리기」가 닿을 원격 브랜치 — 비면 지금 브랜치와 같은 이름으로 올린다. 어느 쪽이든 force 는 없다
+    public string PushBranch { get; set; } = string.Empty;
 
     public int TimeoutSeconds { get; set; } = 120;
 }

@@ -1,4 +1,4 @@
-using GitCenter.Core.Models;
+﻿using GitCenter.Core.Models;
 
 namespace GitCenter.Application.Settings;
 
@@ -16,6 +16,69 @@ public sealed class AppSettings
 
     /// 계약: 목록에서 뺀 저장소의 Id — 스캔이 다시 찾아도 숨긴 채로 둔다
     public List<string> ExcludedIds { get; set; } = [];
+
+    // ── 그룹 ─────────────────────────────────────────────────
+    /// 계약: 사용자가 만든 그룹 이름 — 적은 차례가 곧 화면에 보이는 차례다
+    public List<string> Groups { get; set; } = [];
+
+    /// 계약: 저장소 Id → 그룹 이름. 여기 없으면 스캔이 매긴 폴더 이름을 쓴다
+    public Dictionary<string, string> RepoGroups { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>저장소를 그룹에 넣는다 — 빈 이름이면 그룹에서 뺀다.</summary>
+    /// 계약: 없는 그룹 이름을 주면 그 그룹을 새로 만든다 — 화면이 두 번 물을 일이 없게
+    public void AssignGroup(string repoId, string? group)
+    {
+        var name = group?.Trim() ?? string.Empty;
+        if (name.Length == 0)
+        {
+            RepoGroups.Remove(repoId);
+            return;
+        }
+
+        if (!Groups.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            Groups.Add(name);
+        }
+
+        RepoGroups[repoId] = name;
+    }
+
+    /// <summary>그룹을 지운다 — 그 그룹에 있던 저장소는 스캔이 매긴 이름으로 돌아간다.</summary>
+    public void RemoveGroup(string group)
+    {
+        Groups.RemoveAll(g => g.Equals(group, StringComparison.OrdinalIgnoreCase));
+        foreach (var id in RepoGroups.Where(p => p.Value.Equals(group, StringComparison.OrdinalIgnoreCase))
+                     .Select(p => p.Key).ToList())
+        {
+            RepoGroups.Remove(id);
+        }
+    }
+
+    /// <summary>그룹 이름을 바꾼다 — 그 그룹에 든 저장소를 함께 옮긴다.</summary>
+    public void RenameGroup(string from, string to)
+    {
+        var name = to.Trim();
+        if (name.Length == 0 || name.Equals(from, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var at = Groups.FindIndex(g => g.Equals(from, StringComparison.OrdinalIgnoreCase));
+        if (at < 0)
+        {
+            return;
+        }
+
+        Groups[at] = name;
+        foreach (var id in RepoGroups.Where(p => p.Value.Equals(from, StringComparison.OrdinalIgnoreCase))
+                     .Select(p => p.Key).ToList())
+        {
+            RepoGroups[id] = name;
+        }
+    }
+
+    /// 계약: 저장소 목록에서 접어 둔 그룹 이름 — 「그룹 없음」은 빈 문자열로 적는다
+    public List<string> CollapsedGroups { get; set; } = [];
 
     public bool GitHubDesktopEnabled { get; set; } = true;
 
@@ -49,7 +112,10 @@ public sealed class AppSettings
     public string RemoteName { get; set; } = "origin";
 
     /// 계약: 동시에 돌릴 저장소 수 — 올리면 빨라지지만 디스크·원격이 몰린다
-    public int Concurrency { get; set; } = 4;
+    /// 왜: 코어 수의 절반을 2~8 로 조인다 — 4코어 노트북에서 4개는 git 끼리 디스크를 두고 다툰다
+    public int Concurrency { get; set; } = DefaultConcurrency;
+
+    public static int DefaultConcurrency => Math.Clamp(Environment.ProcessorCount / 2, 2, 8);
 
     /// 계약: 한 저장소의 git 한 번에 줄 제한 시간(초)
     public int GitTimeoutSeconds { get; set; } = 120;
@@ -57,8 +123,27 @@ public sealed class AppSettings
     /// 계약: pull 은 언제나 --ff-only 다 — 끄면 merge 커밋을 허용한다. force push 는 어느 설정으로도 열지 않는다
     public bool FastForwardOnly { get; set; } = true;
 
-    /// 계약: 커밋 창에 처음 채워 넣는 문구
-    public string CommitMessageTemplate { get; set; } = "chore: 일괄 반영";
+    /// 계약: 일괄 「받기」·「현재로 병합」이 가져올 원격 브랜치 — 비우면 저장소마다 기본 브랜치를 찾는다
+    public string ReceiveBranch { get; set; } = "main";
+
+    /// 계약: 일괄 「올리기」가 닿을 원격 브랜치 — 비우면 지금 브랜치와 같은 이름으로 올린다
+    public string PushBranch { get; set; } = "main";
+
+    /// 계약: 사용자가 「작업 중」으로 찍어 둔 저장소 Id — 목록 거르개와 「작업 중만 선택」이 읽는다
+    public HashSet<string> WorkingRepos { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public const string DefaultCommitSubject = "JHJ Git Center {기능} 처리 - {그룹}";
+
+    public const string DefaultCommitBody = "같이 처리한 그룹: {그룹} (저장소 {저장소}개)";
+
+    /// 계약: 예전 기본값이다 — 이 값을 그대로 쥔 PC 만 JsonSettingsStore.WithDefaults 가 새 기본값으로 옮긴다
+    public const string LegacyCommitSubject = "chore: 일괄 반영";
+
+    /// 계약: 일괄 커밋의 제목(첫 줄) 기본값 — 자리표 {기능} · {그룹} · {저장소} 는 실행할 때 채운다
+    public string CommitMessageTemplate { get; set; } = DefaultCommitSubject;
+
+    /// 계약: 일괄 커밋의 메시지(본문) 기본값 — 비우면 제목만 들어간다. 자리표는 제목과 같다
+    public string CommitBodyTemplate { get; set; } = DefaultCommitBody;
 
     /// 계약: 작업 전에 변경이 있으면 자동으로 stash 했다가 끝나고 되돌릴지
     public bool AutoStashBeforePull { get; set; } = false;
@@ -73,7 +158,20 @@ public sealed class AppSettings
     /// "ko" | "en"
     public string Language { get; set; } = "ko";
 
-    public string Hotkey { get; set; } = "Ctrl+Alt+G";
+    /// 계약: 창 전체의 글자·여백 배율 — 0.9 · 1.0 · 1.1 · 1.25 중 하나. 적용하면 바로 반영된다
+    public double UiScale { get; set; } = 1.0;
+
+    /// 계약: 저장소 목록·변경 파일 목록의 줄 높이를 줄여 한 화면에 더 담는다
+    public bool CompactRows { get; set; } = false;
+
+    /// 계약: 오른쪽 작업 로그 단을 접는다 — 좁은 화면에서 가운데 상세를 넓게 쓴다
+    public bool ShowActivityPanel { get; set; } = true;
+
+    /// 계약: 전역 단축키 자리표는 JHJ_DEV/000.AGENTS_MD/060.단축키/060.단축키-대장.md 다 — Git Center 는 3번이다.
+    // 왜: App 이 부팅 때 이 값을 HotkeyRules.Default 에도 넣는다 — 층이 반대라 Core 가 이 상수를 못 읽는다
+    public const string DefaultHotkey = "Ctrl+Alt+3";
+
+    public string Hotkey { get; set; } = DefaultHotkey;
 
     public bool StartAtLogin { get; set; } = false;
 
@@ -81,12 +179,37 @@ public sealed class AppSettings
 
     public bool PinTrayIcon { get; set; } = true;
 
-    public double WindowWidth { get; set; } = 1480;
+    /// 계약: 아이콘 — ""(내장) · "preset:&lt;키&gt;"(앱이 그리는 모양) · 그림 파일 경로. 창 머리·작업 표시줄·트레이가 함께 바뀐다
+    public string AppIcon { get; set; } = "";
 
-    public double WindowHeight { get; set; } = 900;
+    /// 계약: 0 이면 「아직 정한 적 없음」이다 — 창이 사용자 화면의 작업 영역 비율로 잡는다(Core WindowFit)
+    public double WindowWidth { get; set; } = 0;
+
+    public double WindowHeight { get; set; } = 0;
+
+    /// 계약: 처음에는 최대화로 연다 — 그 뒤로는 닫을 때의 상태를 따른다
+    public bool WindowMaximized { get; set; } = true;
+
+    /// 계약: 창 위치 — NaN 이면 아직 한 번도 안 옮긴 것이라 화면 가운데에 띄운다
+    public double WindowLeft { get; set; } = double.NaN;
+
+    public double WindowTop { get; set; } = double.NaN;
+
+    /// 계약: 대시보드 「UI 편집」이 저장한 칸 비율 — 열쇠는 격자 이름(rows · top · middle · bottom), 값은 별(*) 무게다
+    public Dictionary<string, double[]> DashboardLayout { get; set; } = new(StringComparer.Ordinal);
+
+    /// 계약: 통계 카드마다 고른 표시 방식 — 열쇠는 카드 이름(state · group · change · top · age · branch · lines · calendar)
+    /// 계약: 기간이 있는 카드는 「카드 이름.range」 열쇠에 기간을 함께 적는다(calendar.range)
+    public Dictionary<string, string> DashboardChartKinds { get; set; } = new(StringComparer.Ordinal);
 
     /// 계약: 저장소 목록에서 마지막으로 고른 저장소 Id — 다시 열 때 그 줄을 고른다
     public string? LastSelectedRepoId { get; set; }
+
+    /// 계약: 마지막으로 본 화면 — 0 대시보드 · 1 저장소 관리. 다시 열 때 그 화면부터 보인다
+    public int StartPage { get; set; } = 0;
+
+    /// 계약: 그룹 안 정렬 — "name" · "state" · "recent". 보던 상태라 「기본값으로」가 건드리지 않는다
+    public string RepoSort { get; set; } = "name";
 
     public bool DiagnosticsEnabled { get; set; } = true;
 
@@ -115,6 +238,9 @@ public sealed class AppSettings
             GitTimeoutSeconds = d.GitTimeoutSeconds;
             FastForwardOnly = d.FastForwardOnly;
             CommitMessageTemplate = d.CommitMessageTemplate;
+            CommitBodyTemplate = d.CommitBodyTemplate;
+            ReceiveBranch = d.ReceiveBranch;
+            PushBranch = d.PushBranch;
             AutoStashBeforePull = d.AutoStashBeforePull;
         }
 
@@ -123,9 +249,13 @@ public sealed class AppSettings
             Theme = d.Theme;
             Palette = d.Palette;
             Language = d.Language;
+            UiScale = d.UiScale;
+            CompactRows = d.CompactRows;
+            ShowActivityPanel = d.ShowActivityPanel;
             Hotkey = d.Hotkey;
             MinimizeToTray = d.MinimizeToTray;
             PinTrayIcon = d.PinTrayIcon;
+            AppIcon = d.AppIcon;
         }
 
         if (group is SettingsGroup.All)

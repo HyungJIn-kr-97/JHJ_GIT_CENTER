@@ -78,6 +78,11 @@ public sealed class RepoStatus
 
     public int StashCount { get; set; }
 
+    /// 계약: 마지막 커밋과 견준 추가·삭제 줄 수(스테이지 + 수정) — 추적 전 새 파일의 줄은 세지 않는다
+    public int Insertions { get; set; }
+
+    public int Deletions { get; set; }
+
     /// 계약: 기본 브랜치(origin/HEAD 또는 main·master) 이름 — 「main 받기」가 쓴다
     public string? DefaultBranch { get; set; }
 
@@ -116,6 +121,10 @@ public enum GitOperationState
     Bisecting
 }
 
+/// <summary>커밋 하나 — 「커밋 내역」 화면의 한 줄.</summary>
+/// 계약: Day 는 커밋한 날(%cs)이다 — 커밋 캘린더가 세는 날과 같은 값이다
+public sealed record CommitInfo(string Sha, DateOnly Day, string Author, DateTimeOffset? When, string Subject);
+
 /// <summary>git status --porcelain=v2 한 줄.</summary>
 public sealed class FileChange
 {
@@ -136,6 +145,19 @@ public sealed class FileChange
     public bool IsStaged => Index is not ('?' or '.' or ' ' or 'U');
 
     public bool HasWorkTreeChange => WorkTree is not ('?' or '.' or ' ' or 'U');
+
+    /// 계약: HEAD 와 견준 추가·삭제 줄 수 — 못 셌으면(폴더 · 큰 새 파일 · 커밋 없는 저장소) null 이다
+    public int? Insertions { get; set; }
+
+    public int? Deletions { get; set; }
+
+    public bool IsBinary { get; set; }
+
+    public string AddedText => Insertions is { } n ? $"+{n:N0}" : string.Empty;
+
+    public string RemovedText => Deletions is { } n ? $"−{n:N0}" : string.Empty;
+
+    public string LineNote => IsBinary ? "바이너리" : string.Empty;
 }
 
 /// <summary>충돌 파일 하나와 그 안의 충돌 덩어리들.</summary>
@@ -149,7 +171,27 @@ public sealed class ConflictFile
     public string? Note { get; set; }
 
     public bool IsBinary { get; set; }
+
+    /// 계약: 구간을 골라 앱에서 풀 수 있는 파일인가 — 한쪽이 지웠거나 바이너리면 false 다
+    public bool CanResolve { get; set; }
+
+    /// 계약: 공통 조상이 있는가 — 양쪽이 새로 만든 파일(add/add)이면 false 라 자동 판정을 거의 못 한다
+    public bool HasBase { get; set; }
 }
+
+/// <summary>충돌 구간 하나를 어떻게 풀지.</summary>
+/// 계약: Merged 는 공통 조상에서 양쪽이 고친 줄을 합친 것이다 — ConflictResolver.TryMergeLines 가 될 때만 고를 수 있다
+public enum ConflictChoice
+{
+    None,
+    Ours,
+    Theirs,
+    Both,
+    Merged
+}
+
+/// <summary>충돌 해결·병합 마무리 한 번의 결과.</summary>
+public sealed record ConflictActionResult(bool Ok, string Message);
 
 /// <summary>&lt;&lt;&lt;&lt;&lt;&lt;&lt; ~ &gt;&gt;&gt;&gt;&gt;&gt;&gt; 한 덩어리.</summary>
 public sealed class ConflictHunk
@@ -187,4 +229,49 @@ public sealed class BranchInfo
     public DateTimeOffset? LastCommitWhen { get; init; }
 
     public string? LastCommitSubject { get; init; }
+}
+
+/// <summary>파일 하나의 변경 내용 — git diff 를 줄 단위로 푼 것.</summary>
+public sealed class FileDiff
+{
+    public required string Path { get; init; }
+
+    public List<DiffLine> Lines { get; init; } = [];
+
+    public int Added { get; set; }
+
+    public int Removed { get; set; }
+
+    public bool IsBinary { get; set; }
+
+    /// 계약: 보여줄 줄이 없을 때 그 까닭 한 줄 — 바이너리 · 너무 큼 · 스테이지 전후가 같음
+    public string? Note { get; set; }
+}
+
+public enum DiffLineKind
+{
+    /// 계약: @@ 로 시작하는 구역 머리 — 줄 번호가 어디로 건너뛰는지 알린다
+    Hunk,
+    Context,
+    Added,
+    Removed,
+    /// 계약: diff 머리말(diff --git · index · --- · +++) — 접어 두고 보통은 안 보인다
+    Meta
+}
+
+/// <summary>diff 한 줄.</summary>
+public sealed class DiffLine
+{
+    public required DiffLineKind Kind { get; init; }
+
+    public required string Text { get; init; }
+
+    /// 계약: 그 줄이 없는 쪽은 null 이다 — 더한 줄에 OldNo 가 없고, 지운 줄에 NewNo 가 없다
+    public int? OldNo { get; init; }
+
+    public int? NewNo { get; init; }
+
+    public string OldNoText => OldNo?.ToString() ?? string.Empty;
+
+    public string NewNoText => NewNo?.ToString() ?? string.Empty;
 }

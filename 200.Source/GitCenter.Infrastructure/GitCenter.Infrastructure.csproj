@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>GitCenter.Infrastructure</RootNamespace>
+    <!-- 계약: 이 층은 화면을 모른다 — Core 도 Jhj.Core + Jhj.Core.Windows 까지만 당긴다 -->
+    <JhjCoreProjects>windows</JhjCoreProjects>
   </PropertyGroup>
+  <Import Project="..\..\..\JHJ_CS_CORE\200.Source\100.Core\cs\Jhj.Core.props" />
   <ItemGroup>
     <ProjectReference Include="..\GitCenter.Application\GitCenter.Application.csproj" />
   </ItemGroup>

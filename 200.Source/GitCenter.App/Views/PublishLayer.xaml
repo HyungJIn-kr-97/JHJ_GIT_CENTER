@@ -1,0 +1,94 @@
+<UserControl x:Class="GitCenter.App.Views.PublishLayer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf"
+             xmlns:vm="clr-namespace:GitCenter.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+             Visibility="{Binding IsPublishOpen, Converter={StaticResource BoolToVisibility}}">
+
+    <!--
+      원격이 없는 저장소를 GitHub 에 올리는 층(MainViewModel.Publish.cs) - 이름 · 공개 여부 · 설명을 받아 gh repo create 한 번으로 만들고 연결하고 올린다.
+      계약: 저장소 줄의 「GitHub 에 올리기」 · 상세 「작업」 탭 · 일괄 작업의 「원격 없음」 건너뜀이 연다. 기본은 비공개다.
+      계약: 폭은 PushGapLayer 와 같은 비율이고 px 는 하한뿐이다.
+    -->
+    <Grid Background="{StaticResource ScrimBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="2*" MinWidth="520" MaxWidth="760" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="1" VerticalAlignment="Center"
+                Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource DividerBrush}"
+                BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="18,16">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="24" ShadowDepth="6" Direction="270" Opacity="0.3" Color="#000000" />
+            </Border.Effect>
+            <StackPanel>
+                <TextBlock Text="{Binding PublishCaption}" Style="{StaticResource Subtitle}" />
+                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,12"
+                           Text="{loc:Tr 'GitHub 에 저장소를 만들고 이 폴더의 원격으로 연결한 뒤 지금 브랜치를 올립니다. 로컬 파일은 바뀌지 않습니다.'}" />
+
+                <!-- 계정 줄 - 로그인 전이면 여기서 바로 로그인한다 -->
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{loc:Tr 'GitHub 계정'}" Style="{StaticResource Caption}" VerticalAlignment="Center" Width="96" />
+                    <TextBlock Grid.Column="1" Text="{Binding GitHub.StatusText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Column="2" Content="{Binding GitHub.ActionText}" Padding="9,4"
+                            Command="{Binding ToggleGitHubLoginCommand}" />
+                </Grid>
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{loc:Tr '저장소 이름'}" Style="{StaticResource Caption}" VerticalAlignment="Center" Width="96" />
+                    <TextBox Grid.Column="1" Text="{Binding PublishName, UpdateSourceTrigger=PropertyChanged}" />
+                </Grid>
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{loc:Tr '설명'}" Style="{StaticResource Caption}" VerticalAlignment="Center" Width="96" />
+                    <TextBox Grid.Column="1" Text="{Binding PublishDescription, UpdateSourceTrigger=PropertyChanged}"
+                             Tag="{loc:Tr '비워도 됩니다'}" />
+                </Grid>
+
+                <!-- 계약: 기본은 비공개 - 끄면 공개 저장소가 된다 -->
+                <CheckBox Margin="96,2,0,0" IsChecked="{Binding PublishPrivate}"
+                          Content="{loc:Tr '비공개 저장소로 만듭니다 — 끄면 누구나 볼 수 있는 공개 저장소가 됩니다'}" />
+
+                <TextBlock TextWrapping="Wrap" Margin="0,10,0,0" FontSize="{StaticResource FontSm}"
+                           Foreground="{DynamicResource WarnBrush}" Text="{Binding PublishNote}"
+                           Visibility="{Binding PublishNote, Converter={StaticResource EmptyToVisibility}}" />
+
+                <!-- 계약: 단추는 오른쪽에 모은다 - 으뜸 단추는 「만들어 올리기」이고 「닫기」는 보통 단추다 -->
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Command="{Binding PublishCommand}"
+                            ToolTip="{loc:Tr 'gh repo create 로 저장소를 만들고 원격을 연결한 뒤 지금 브랜치를 올립니다 — force 는 없습니다'}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconExternal}" Margin="0,0,6,0" />
+                            <TextBlock Text="{loc:Tr '만들어 올리기'}" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="2" Margin="6,0,0,0" Content="{loc:Tr '닫기'}" Command="{Binding ClosePublishCommand}" IsCancel="True" />
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

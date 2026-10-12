@@ -131,8 +131,12 @@ public sealed partial class RepoRow : ObservableObject
 
     partial void OnIsSelectedChanged(bool value) => Entry.Selected = value;
 
+    /// 계약: 원격이 하나도 없는 저장소 — 「GitHub 에 올리기」 단추는 이것일 때만 보인다
+    public bool IsLocalOnly => Status is { HasRemote: false };
+
     partial void OnStatusChanged(RepoStatus? value)
     {
+        OnPropertyChanged(nameof(IsLocalOnly));
         OnPropertyChanged(nameof(BranchText));
         OnPropertyChanged(nameof(AheadBehindText));
         OnPropertyChanged(nameof(ChangeText));

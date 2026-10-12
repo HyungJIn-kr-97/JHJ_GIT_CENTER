@@ -76,6 +76,20 @@
             </Border>
 
             <!-- 업데이트 — 화면·동작은 JHJ_CS_CORE 의 UpdatePanel 이 갖는다 -->
+            <!-- GitHub 계정 — 로그인·로그아웃은 gh CLI 가 맡는다(Services/GitHubAccount). 제목 띠의 칩과 같은 객체다 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="{loc:Tr 'GitHub 계정'}" Style="{StaticResource SectionTitle}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding GitHub.StatusText}" VerticalAlignment="Center" />
+                        <Button Content="{Binding GitHub.ActionText}" Padding="9,4" Margin="10,0,0,0"
+                                Command="{Binding ToggleGitHubLoginCommand}" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="{loc:Tr '로그인은 gh CLI 가 맡습니다 — 콘솔이 열리고 브라우저에서 승인하면 됩니다. 토큰은 이 앱이 아니라 gh 가 보관하고, 원격이 없는 저장소를 GitHub 에 올릴 때 이 계정을 씁니다.'}" />
+                </StackPanel>
+            </Border>
+
             <Border Style="{StaticResource Card}" Margin="0,0,0,10">
                 <StackPanel>
                     <TextBlock Text="업데이트" Style="{StaticResource SectionTitle}" />

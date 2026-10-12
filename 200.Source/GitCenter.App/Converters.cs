@@ -104,39 +104,7 @@ public sealed class ChangeKindConverter : IValueConverter
     };
 }
 
-public sealed class BoolToVisibilityConverter : IValueConverter
-{
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        var flag = value is bool b && b;
-        if (parameter is string s && s.Equals("invert", StringComparison.OrdinalIgnoreCase))
-        {
-            flag = !flag;
-        }
-
-        return flag ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
-}
-
-/// <summary>빈 문자열·null 이면 숨긴다. ConverterParameter="invert" 면 반대 — 빈 칸일 때만 보인다.</summary>
-/// 계약: invert 쪽이 글상자의 흐린 안내 문구(placeholder)를 켜고 끈다
-public sealed class EmptyToVisibilityConverter : IValueConverter
-{
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        var visible = !string.IsNullOrWhiteSpace(value as string);
-        if (parameter is string s && s.Equals("invert", StringComparison.OrdinalIgnoreCase))
-        {
-            visible = !visible;
-        }
-
-        return visible ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
-}
+// 계약: BoolToVisibility · EmptyToVisibility(Core 이름 EmptyToCollapsed) · IndexToVisibility · IndexToBool 은 Core Jhj.Core.Wpf.Converters 다 — Styles.xaml 이 cv: 로 건다
 
 /// <summary>0 보다 크면 보인다 — 진행 막대·건수 뱃지에 쓴다. ConverterParameter="invert" 면 반대다.</summary>
 // 함정: invert 를 안 다루면 「없습니다」 안내가 영영 안 보인다 — 건수 0 일 때 보여야 하는 쪽이다
@@ -346,24 +314,4 @@ public sealed class DiffSignConverter : IValueConverter
     };
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
-}
-
-/// <summary>번호가 ConverterParameter 와 같으면 보인다 — 제목 띠의 탭이 고른 화면만 남긴다.</summary>
-public sealed class IndexToVisibilityConverter : IValueConverter
-{
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value?.ToString() == parameter?.ToString() ? Visibility.Visible : Visibility.Collapsed;
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
-}
-
-/// <summary>번호가 ConverterParameter 와 같으면 true — 탭(RadioButton)의 IsChecked 를 번호 하나에 잇는다.</summary>
-/// 계약: 꺼지는 쪽(false)은 되돌려 보내지 않는다 — 켜지는 탭 하나만 번호를 바꾼다
-public sealed class IndexToBoolConverter : IValueConverter
-{
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value?.ToString() == parameter?.ToString();
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is true && int.TryParse(parameter?.ToString(), out var index) ? index : Binding.DoNothing;
 }

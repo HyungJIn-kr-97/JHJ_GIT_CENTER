@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf"
+        xmlns:core="clr-namespace:Jhj.Core.App;assembly=Jhj.Core"
         xmlns:vm="clr-namespace:GitCenter.App.ViewModels"
         xmlns:views="clr-namespace:GitCenter.App.Views"
         xmlns:controls="clr-namespace:GitCenter.App.Controls"
@@ -50,6 +51,65 @@
                                Foreground="{DynamicResource TextMutedBrush}" />
                 </Expander>
             </StackPanel>
+        </DataTemplate>
+
+        <!-- 계약: 분류 알약 하나 — Tag 가 건수다. 로그 탭의 아래 줄만 쓴다 -->
+        <Style x:Key="LogKindToggle" TargetType="ToggleButton" BasedOn="{StaticResource PillToggle}">
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="0,0,4,4" />
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding}" FontSize="{StaticResource FontXs}"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+                            <TextBlock Margin="5,0,0,0" FontSize="{StaticResource FontXs}" FontWeight="Bold"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                       Text="{Binding Tag, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+          로그 탭의 몸통 — 목록 + 아래의 분류·검색 줄. 세 탭(작업 로그 · 시스템 작업 로그 · 시스템 오류)이 함께 쓴다.
+          계약: 분류·검색은 탭마다 따로다(ActivityLogView) — 「기록 없음」 문구는 탭이 제각각 얹는다.
+        -->
+        <DataTemplate x:Key="ActivityLogPane" DataType="{x:Type vm:ActivityLogView}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Style="{StaticResource Caption}" Margin="4,8,8,0" TextWrapping="Wrap"
+                           Text="{loc:Tr '조건에 맞는 기록이 없습니다 — 분류나 검색어를 바꿔 보십시오.'}"
+                           Visibility="{Binding IsFilteredEmpty, Converter={StaticResource BoolToVisibility}}" />
+                <ListBox ItemsSource="{Binding Items}" Padding="0,0,4,0"
+                         ItemTemplate="{StaticResource ActivityRow}" />
+
+                <StackPanel Grid.Row="1" Margin="0,8,8,0"
+                            Visibility="{Binding TotalCount, Converter={StaticResource CountToVisibility}}">
+                    <WrapPanel>
+                        <ToggleButton Style="{StaticResource LogKindToggle}" Content="{loc:Tr '전체'}"
+                                      Tag="{Binding TotalCount}" IsChecked="{Binding IsAll, Mode=TwoWay}" />
+                        <ToggleButton Style="{StaticResource LogKindToggle}" Content="{loc:Tr '성공'}"
+                                      Tag="{Binding OkCount}" IsChecked="{Binding IsOk, Mode=TwoWay}"
+                                      Visibility="{Binding ErrorsOnly, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}" />
+                        <ToggleButton Style="{StaticResource LogKindToggle}" Content="{loc:Tr '실패'}"
+                                      Tag="{Binding FailedCount}" IsChecked="{Binding IsFailed, Mode=TwoWay}" />
+                        <ToggleButton Style="{StaticResource LogKindToggle}" Content="{loc:Tr '충돌'}"
+                                      Tag="{Binding ConflictCount}" IsChecked="{Binding IsConflict, Mode=TwoWay}" />
+                        <ToggleButton Style="{StaticResource LogKindToggle}" Content="{loc:Tr '건너뜀'}"
+                                      Tag="{Binding SkippedCount}" IsChecked="{Binding IsSkipped, Mode=TwoWay}"
+                                      Visibility="{Binding ErrorsOnly, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}" />
+                    </WrapPanel>
+                    <TextBox Style="{StaticResource SearchBox}" Margin="0,2,0,0"
+                             Tag="{loc:Tr '저장소 · 내용 · 시각으로 검색'}"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+            </Grid>
         </DataTemplate>
     </Window.Resources>
 
@@ -149,6 +209,17 @@
                     <Button x:Name="HelpButton" Grid.Column="2" Style="{StaticResource NavButton}" HorizontalAlignment="Left"
                             Content="{loc:Tr '도움말'}" ToolTip="{loc:Tr '이 화면의 기능을 차례로 짚어 줍니다'}"
                             Click="OnHelpClick" />
+
+                    <!-- 계약: GitHub 계정 칩 — gh CLI 의 로그인(Services/GitHubAccount). 누르면 로그인 콘솔을 열거나 로그아웃한다. 창 단추와는 띄워 둔다 -->
+                    <Button x:Name="AccountButton" Grid.Column="2" Style="{StaticResource NavButton}" HorizontalAlignment="Right"
+                            Margin="0,0,14,0" Command="{Binding ToggleGitHubLoginCommand}"
+                            ToolTip="{Binding GitHub.ChipToolTip}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconExternal}" Width="12" Height="12" Margin="0,0,6,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            <TextBlock Text="{Binding GitHub.ChipText}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
 
                     <!-- 계약: 창 단추는 띠 높이를 꽉 채우고 모서리에 붙는다 — 진짜 제목 표시줄과 같은 자리다 -->
                     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Stretch">
@@ -1014,6 +1085,15 @@
                                 <TextBlock Text="{loc:Tr '원격 페이지'}" FontSize="{StaticResource FontXs}" Foreground="{DynamicResource TextSecondaryBrush}" />
                             </StackPanel>
                         </Button>
+                        <!-- 계약: 원격이 없는 저장소에만 보인다 — 일괄 작업의 「원격 없음」 건너뜀이 이 단추를 깜빡인다(Nudge publish) -->
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding OpenPublishCommand}" Margin="0,0,4,4"
+                                controls:Nudge.Key="publish" controls:Nudge.Active="{Binding NudgeAction}"
+                                Visibility="{Binding SelectedRow.IsLocalOnly, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconExternal}" Width="13" Height="13" Margin="0,0,5,0" />
+                                <TextBlock Text="{loc:Tr 'GitHub 에 올리기'}" FontSize="{StaticResource FontXs}" Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Button>
                         <Button Style="{StaticResource GhostButton}" Command="{Binding CopyPathCommand}" Margin="0,0,4,4">
                             <StackPanel Orientation="Horizontal">
                                 <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconCopy}" Width="13" Height="13" Margin="0,0,5,0" />
@@ -1453,7 +1533,7 @@
 
             <GridSplitter x:Name="ActivitySplitter" Grid.Column="3" Width="9" />
 
-            <!-- 우: 변경 내용 · 작업 로그(고른 저장소) · 시스템 작업 로그(전체) -->
+            <!-- 우: 변경 내용 · 작업 로그(고른 저장소) · 시스템 작업 로그(전체) · 시스템 오류(실패·충돌) -->
             <Border x:Name="ActivityPanel" Grid.Column="4" Style="{StaticResource Card}" Padding="12,10,8,12">
                 <Grid>
                 <TabControl SelectedIndex="{Binding RightTabIndex}">
@@ -1551,8 +1631,8 @@
                                 <TextBlock Style="{StaticResource Caption}" Margin="4,8,8,0" TextWrapping="Wrap"
                                            Text="{loc:Tr '이 저장소에 대한 작업 기록이 아직 없습니다. 전체 기록은 「시스템 작업 로그」 탭에 있습니다.'}"
                                            Visibility="{Binding RepoActivity.Count, Converter={StaticResource CountToVisibility}, ConverterParameter=invert}" />
-                                <ListBox ItemsSource="{Binding RepoActivity}" Padding="0,0,4,0"
-                                         ItemTemplate="{StaticResource ActivityRow}" />
+                                <ContentControl Content="{Binding RepoLog}" Focusable="False"
+                                                ContentTemplate="{StaticResource ActivityLogPane}" />
                             </Grid>
                         </Grid>
                     </TabItem>
@@ -1587,8 +1667,41 @@
                             <Grid Grid.Row="1">
                                 <TextBlock Text="{loc:Tr '작업이 없습니다.'}" Style="{StaticResource Caption}" Margin="4,8,0,0"
                                            Visibility="{Binding Activity.Count, Converter={StaticResource CountToVisibility}, ConverterParameter=invert}" />
-                                <ListBox ItemsSource="{Binding Activity}" Padding="0,0,4,0"
-                                         ItemTemplate="{StaticResource ActivityRow}" />
+                                <ContentControl Content="{Binding SystemLog}" Focusable="False"
+                                                ContentTemplate="{StaticResource ActivityLogPane}" />
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- 시스템 오류 — 전체 기록에서 실패·충돌만 남긴 것. 무엇이 막혔는지 이 탭 하나로 본다 -->
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{loc:Tr '시스템 오류'}" />
+                                <Border Style="{StaticResource Chip}" Margin="7,0,0,0" Padding="6,1"
+                                        Visibility="{Binding ErrorLog.TotalCount, Converter={StaticResource CountToVisibility}}">
+                                    <TextBlock Text="{Binding ErrorLog.TotalCount}" Style="{StaticResource ChipText}" />
+                                </Border>
+                            </StackPanel>
+                        </TabItem.Header>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,4"
+                                        Visibility="{Binding HasReportableError, Converter={StaticResource BoolToVisibility}}">
+                                <Button Style="{StaticResource GhostButton}" Padding="7,2" Content="{loc:Tr '오류 보고'}"
+                                        Command="{Binding ReportErrorCommand}" />
+                            </StackPanel>
+
+                            <Grid Grid.Row="1">
+                                <TextBlock Text="{loc:Tr '실패하거나 충돌로 멈춘 작업이 없습니다.'}" Style="{StaticResource Caption}"
+                                           Margin="4,8,8,0" TextWrapping="Wrap"
+                                           Visibility="{Binding ErrorLog.TotalCount, Converter={StaticResource CountToVisibility}, ConverterParameter=invert}" />
+                                <ContentControl Content="{Binding ErrorLog}" Focusable="False"
+                                                ContentTemplate="{StaticResource ActivityLogPane}" />
                             </Grid>
                         </Grid>
                     </TabItem>
@@ -1634,6 +1747,14 @@
                     <Border Style="{StaticResource Chip}" Padding="5,1" HorizontalAlignment="Center" Margin="0,2,0,0"
                             Visibility="{Binding Activity.Count, Converter={StaticResource CountToVisibility}}">
                         <TextBlock Text="{Binding Activity.Count}" Style="{StaticResource ChipText}" />
+                    </Border>
+                    <Button Style="{StaticResource IconButton}" Command="{Binding ShowRightTabCommand}"
+                            CommandParameter="3" Margin="0,4,0,0" ToolTip="{loc:Tr '시스템 오류'}">
+                        <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconStop}" />
+                    </Button>
+                    <Border Style="{StaticResource Chip}" Padding="5,1" HorizontalAlignment="Center" Margin="0,2,0,0"
+                            Visibility="{Binding ErrorLog.TotalCount, Converter={StaticResource CountToVisibility}}">
+                        <TextBlock Text="{Binding ErrorLog.TotalCount}" Style="{StaticResource ChipText}" />
                     </Border>
                 </StackPanel>
             </Border>
@@ -2115,7 +2236,12 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+
+                <!-- 계약: 창 우측 하단의 앱 버전 — 080.CS앱-화면-공통.md §5 -->
+                <TextBlock Grid.Column="4" Text="{x:Static core:AppVersion.Label}" Style="{StaticResource Micro}"
+                           VerticalAlignment="Center" Margin="14,0,0,0" />
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse Width="7" Height="7" Margin="0,0,8,0" VerticalAlignment="Center">
@@ -2175,6 +2301,8 @@
         <!-- 계약: 커밋 · Push 앞뒤의 확인 층 둘 — 평소에는 접혀 있다(그림은 각 파일, 값은 MainViewModel.PushCheck.cs) -->
         <views:PushGapLayer Grid.RowSpan="4" />
         <views:OffBranchLayer Grid.RowSpan="4" />
+        <!-- 계약: 원격 없는 저장소를 GitHub 에 올리는 층 — 값은 MainViewModel.Publish.cs -->
+        <views:PublishLayer Grid.RowSpan="4" />
 
         <!-- ⑤ 도움말 안내 층 — 평소에는 접혀 있고 「도움말」이 펴서 화면 요소를 차례로 비춘다(MainWindow.Tour.cs) -->
         <controls:TourOverlay x:Name="Tour" Grid.RowSpan="4" Visibility="Collapsed" />

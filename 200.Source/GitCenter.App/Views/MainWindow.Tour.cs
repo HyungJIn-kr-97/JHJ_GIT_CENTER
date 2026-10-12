@@ -25,6 +25,8 @@ public partial class MainWindow
     {
         yield return Step(NavTabs, "화면 탭",
             "화면은 넷입니다. 「대시보드」는 전체 현황, 「저장소 관리」는 받기·커밋·올리기, 「커밋 내역」은 고른 기간·저장소의 커밋, 「점검」은 설정 점검과 일괄 적용입니다. 도움말은 지금 보고 있는 화면을 짚습니다.");
+        yield return Step(AccountButton, "GitHub 계정",
+            "gh CLI 로 로그인한 GitHub 계정입니다. 누르면 로그인 콘솔이 열리고(브라우저에서 승인), 로그인돼 있으면 로그아웃합니다. 원격이 없는 저장소를 「GitHub 에 올리기」로 만들어 연결할 때 이 계정을 씁니다.");
 
         switch (page)
         {

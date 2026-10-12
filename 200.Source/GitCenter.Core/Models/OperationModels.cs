@@ -83,6 +83,9 @@ public static class BulkNextAction
 
     /// 지금 브랜치가 작업 브랜치가 아니라 건너뛰었다 — 「전환」으로 작업 브랜치에 옮긴다
     public const string Switch = "switch";
+
+    /// 원격이 등록돼 있지 않아 건너뛰었다 — 저장소 줄의 「GitHub 에 올리기」로 만들어 연결한다
+    public const string Publish = "publish";
 }
 
 /// <summary>git 한 번 실행의 결과.</summary>

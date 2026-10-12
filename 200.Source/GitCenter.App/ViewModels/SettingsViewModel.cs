@@ -26,6 +26,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsStore _store;
     private readonly MainViewModel _main;
 
+    /// 계약: GitHub 계정은 MainViewModel 의 것과 같은 객체다 — 설정 「일반」 탭과 제목 띠 칩이 같은 상태를 본다
+    public GitHubAccount GitHub => _main.GitHub;
+
+    public IAsyncRelayCommand ToggleGitHubLoginCommand => _main.ToggleGitHubLoginCommand;
+
     public SettingsViewModel(ISettingsStore store, AppSettings settings, MainViewModel main, UpdateOptions updateOptions)
     {
         _store = store;

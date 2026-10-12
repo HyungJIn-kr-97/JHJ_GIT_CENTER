@@ -26,6 +26,8 @@
     <PublishDocumentationFile>false</PublishDocumentationFile>
     <InvariantGlobalization>false</InvariantGlobalization>
     <ApplicationIcon>Resources\app-icon.ico</ApplicationIcon>
+    <!-- 계약: 모니터별 배율(PerMonitorV2) 선언 — 빼면 배율이 다른 화면에서 모든 창이 흐려진다 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>

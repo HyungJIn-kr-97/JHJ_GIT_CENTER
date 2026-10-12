@@ -883,6 +883,20 @@ public sealed class GitService(IGitRunner runner) : IGitService
                 return step;
             }
 
+            // 왜: 원격 없는 로컬 전용 저장소에 git 원문(fatal: 'origin' does not appear…)을 그대로 내면 사용자가 읽지 못한다 — 실패가 아니라 건너뜀으로 센다
+            if (NeedsRemote(kind))
+            {
+                var remote = await _runner.RunAsync(repo.Path, ["remote", "get-url", options.RemoteName], cancellationToken, 20).ConfigureAwait(false);
+                if (!remote.Ok)
+                {
+                    step.Outcome = StepOutcome.Skipped;
+                    step.Message = $"원격 저장소 {options.RemoteName} 이 등록돼 있지 않아 건너뛰었습니다 — 로컬에만 있는 저장소입니다. GitHub 에 올리려면 저장소 줄의 「GitHub 에 올리기」를 눌러 주십시오.";
+                    step.Detail = remote.Text;
+                    step.NextAction = BulkNextAction.Publish;
+                    return step;
+                }
+            }
+
             switch (kind)
             {
                 case BulkOperationKind.Fetch:
@@ -951,7 +965,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
         if (!result.Ok)
         {
             step.Outcome = StepOutcome.Failed;
-            step.Message = FirstLine(result.Text);
+            step.Message = DescribeFailure(result.Text);
             step.Detail = result.Text;
             return;
         }
@@ -1077,7 +1091,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
             ? $"{defaultBranch} 가 갈라져 빨리감기로 갱신할 수 없습니다."
             : result.Text.Contains("couldn't find remote ref", StringComparison.OrdinalIgnoreCase)
                 ? $"{options.RemoteName} 에 {defaultBranch} 브랜치가 없습니다 — 이 저장소의 업로드 브랜치를 따로 고르거나 비우면 기본 브랜치를 씁니다."
-                : FirstLine(result.Text);
+                : DescribeFailure(result.Text);
         step.Detail = result.Text;
     }
 
@@ -1130,6 +1144,16 @@ public sealed class GitService(IGitRunner runner) : IGitService
             return;
         }
 
+        // 왜: git 은 겹치면 영어 원문으로 거부한다 — 병합을 걸기 전에 겹친 파일을 찾아 무엇을 먼저 할지 우리말로 알린다
+        var overlap = await OverlapWithIncomingAsync(repo, reference, ct).ConfigureAwait(false);
+        if (overlap.Count > 0)
+        {
+            step.Outcome = StepOutcome.Failed;
+            step.Message = OverlapMessage(overlap.Count, reference);
+            step.Detail = string.Join(Environment.NewLine, overlap);
+            return;
+        }
+
         var result = await _runner.RunAsync(repo.Path,
             ["merge", "--no-edit", reference], ct, options.TimeoutSeconds).ConfigureAwait(false);
 
@@ -1155,7 +1179,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
         }
 
         step.Outcome = StepOutcome.Failed;
-        step.Message = FirstLine(result.Text);
+        step.Message = DescribeFailure(result.Text);
         step.Detail = result.Text;
     }
 
@@ -1233,7 +1257,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
             step.Outcome = StepOutcome.Failed;
             step.Message = result.Text.Contains("no tracking information", StringComparison.OrdinalIgnoreCase)
                 ? $"{options.RemoteName} 에 이 브랜치를 올린 적이 없어 받을 곳이 없습니다."
-                : FirstLine(result.Text);
+                : DescribeFailure(result.Text);
         }
 
         step.Detail = result.Text;
@@ -1304,7 +1328,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
             }
             else
             {
-                failed.Add($"{branch.Name}: {FirstLine(fetch.Text)}");
+                failed.Add($"{branch.Name}: {DescribeFailure(fetch.Text)}");
             }
         }
 
@@ -1454,8 +1478,49 @@ public sealed class GitService(IGitRunner runner) : IGitService
         }
 
         List<string> args = ["push", options.RemoteName, $"HEAD:refs/heads/{upload}"];
-        return await RunPushAsync(repo, options, args, upload,
+        var pushed = await RunPushAsync(repo, options, args, upload,
             $"{branch} 를 {options.RemoteName}/{upload} 로 올렸습니다.", ct).ConfigureAwait(false);
+        return pushed.Outcome == StepOutcome.Failed
+            ? pushed
+            : await SyncLocalUploadAsync(repo, options, upload, pushed, ct).ConfigureAwait(false);
+    }
+
+    // 왜: 원격 업로드 브랜치만 올리면 로컬의 같은 이름 브랜치가 남아 줄에 「뒤처짐 N」으로 보인다
+    // 계약: 원격에 닿지 않는다(`fetch .`) — 빨리감기만 하고, 로컬 브랜치가 없으면 만들지 않으며 갈라졌으면 git 이 거부해 그대로 남는다
+    private async Task<PushPart> SyncLocalUploadAsync(
+        RepoEntry repo, BulkOperationOptions options, string upload, PushPart pushed, CancellationToken ct)
+    {
+        var local = await _runner.RunAsync(repo.Path,
+            ["show-ref", "--verify", "--quiet", $"refs/heads/{upload}"], ct, 20).ConfigureAwait(false);
+        if (!local.Ok)
+        {
+            return pushed;
+        }
+
+        var sync = await _runner.RunAsync(repo.Path,
+            ["fetch", ".", $"refs/remotes/{options.RemoteName}/{upload}:refs/heads/{upload}"], ct, 20).ConfigureAwait(false);
+        if (!sync.Ok)
+        {
+            return pushed with
+            {
+                Message = $"{pushed.Message} · 로컬 {upload} 는 빨리감기가 안 돼 그대로 두었습니다.",
+                Detail = string.Join(Environment.NewLine, new[] { pushed.Detail, sync.Text }.Where(t => t.Length > 0)),
+            };
+        }
+
+        if (sync.Text.Trim().Length == 0)
+        {
+            return pushed;
+        }
+
+        return pushed with
+        {
+            Outcome = StepOutcome.Success,
+            Message = pushed.Outcome == StepOutcome.Success
+                ? $"{pushed.Message} · 로컬 {upload} 도 맞췄습니다."
+                : $"로컬 {upload} 를 {options.RemoteName}/{upload} 에 맞췄습니다.",
+            Detail = string.Join(Environment.NewLine, new[] { pushed.Detail, sync.Text }.Where(t => t.Length > 0)),
+        };
     }
 
     private async Task<PushPart> RunPushAsync(
@@ -1787,6 +1852,77 @@ public sealed class GitService(IGitRunner runner) : IGitService
         }
 
         return (ahead, behind);
+    }
+
+    // 계약: Fetch·Pull·Push 가 원격에 닿는 종류인지 — 원격 없는 저장소는 이 종류만 건너뛴다 (CommitAndPush 는 커밋은 해야 하므로 Push 쪽 판정에 맡긴다)
+    private static bool NeedsRemote(BulkOperationKind kind) => kind is BulkOperationKind.Fetch
+        or BulkOperationKind.UpdateDefaultBranch
+        or BulkOperationKind.MergeDefaultIntoCurrent
+        or BulkOperationKind.PullCurrent
+        or BulkOperationKind.UpdateAllTrackedBranches
+        or BulkOperationKind.Push;
+
+    /// 계약: 커밋하지 않은 변경(추적 파일 + 추적 전 파일) 가운데 reference 에서 들어올 파일과 겹치는 것만 돌려준다 — 읽기만 한다
+    // 함정: 이미 병합 중이면 묻지 않는다 — HEAD 와 견준 변경이 전부 병합분이라 통째로 겹친 것으로 보인다
+    private async Task<IReadOnlyList<string>> OverlapWithIncomingAsync(RepoEntry repo, string reference, CancellationToken ct)
+    {
+        var gitDir = await ResolveGitDirAsync(repo, ct).ConfigureAwait(false);
+        if (DetectOperation(gitDir) != GitOperationState.None)
+        {
+            return [];
+        }
+
+        // 계약: 세 점(HEAD...ref)은 갈라진 뒤 상대 쪽이 바꾼 파일이다 — 병합이 실제로 덮어쓸 파일과 같다
+        var incoming = await _runner.RunAsync(repo.Path,
+            ["-c", "core.quotepath=false", "diff", "--name-only", $"HEAD...{reference}"], ct, 60).ConfigureAwait(false);
+        if (!incoming.Ok)
+        {
+            return [];
+        }
+
+        var theirs = Lines(incoming.StdOut).ToHashSet(StringComparer.Ordinal);
+        if (theirs.Count == 0)
+        {
+            return [];
+        }
+
+        var tracked = await _runner.RunAsync(repo.Path,
+            ["-c", "core.quotepath=false", "diff", "--name-only", "HEAD"], ct, 60).ConfigureAwait(false);
+        var untracked = await _runner.RunAsync(repo.Path,
+            ["-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"], ct, 60).ConfigureAwait(false);
+
+        return Lines(tracked.StdOut).Concat(Lines(untracked.StdOut))
+            .Where(theirs.Contains).Distinct(StringComparer.Ordinal).ToList();
+
+        static IEnumerable<string> Lines(string text) =>
+            text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0);
+    }
+
+    private static string OverlapMessage(int count, string reference) =>
+        $"커밋하지 않은 변경 {count}개가 {reference} 에서 들어올 파일과 겹쳐 병합하지 않았습니다 — 먼저 커밋한 뒤 다시 Merge 해 주십시오.";
+
+    // 계약: 사용자가 자주 만나는 git 원문 넷만 우리말로 바꾼다 — 원문은 Detail 이 갖는다
+    private static string DescribeFailure(string text)
+    {
+        // 왜: 사전 점검이 못 거른 겹침(Pull · 병합 중 판정 실패)도 같은 말로 알린다
+        if (text.Contains("would be overwritten", StringComparison.OrdinalIgnoreCase))
+        {
+            return "커밋하지 않은 변경이 들어올 파일과 겹쳐 진행하지 않았습니다 — 먼저 커밋한 뒤 다시 해 주십시오. 겹친 파일은 「자세히」에 있습니다.";
+        }
+
+        if (text.Contains("does not appear to be a git repository", StringComparison.OrdinalIgnoreCase))
+        {
+            return "원격 저장소가 등록돼 있지 않거나 주소가 틀렸습니다 — git remote -v 로 주소를 확인해 주십시오.";
+        }
+
+        if (text.Contains("Could not resolve host", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("Could not read from remote repository", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("Authentication failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "원격 저장소에 접속하지 못했습니다 — 네트워크 연결과 GitHub 로그인(자격 증명)을 확인해 주십시오.";
+        }
+
+        return FirstLine(text);
     }
 
     private static string FirstLine(string text)

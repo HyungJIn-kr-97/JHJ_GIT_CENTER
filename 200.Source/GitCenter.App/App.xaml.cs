@@ -228,6 +228,7 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<IRepoSource, CommandSource>();
                 services.AddSingleton<RepoRegistry>();
                 services.AddSingleton<BulkOperationRunner>();
+                services.AddSingleton<GitHubAccount>();
 
                 services.AddSingleton<MainViewModel>();
                 services.AddSingleton<SettingsViewModel>();

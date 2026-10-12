@@ -42,9 +42,12 @@ public sealed partial class MainViewModel : ObservableObject
         RepoRegistry registry,
         IGitService git,
         BulkOperationRunner runner,
-        IGitRunner gitRunner)
+        IGitRunner gitRunner,
+        GitHubAccount gitHub)
     {
         _settingsStore = settingsStore;
+        GitHub = gitHub;
+        GitHub.ReadCached();
         _registry = registry;
         _git = git;
         _runner = runner;
@@ -91,6 +94,17 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// 계약: 고른 저장소의 기록만 — 「작업 로그」 탭이 그린다. 고른 줄이 바뀌면 다시 채운다
     public ObservableCollection<ActivityEntry> RepoActivity { get; } = [];
+
+    // 계약: 로그 탭 셋의 보기 — 탭마다 분류·검색을 따로 건다. 「시스템 오류」는 전체 기록에서 실패·충돌만 남긴 것이다
+    private ActivityLogView? _repoLog;
+    private ActivityLogView? _systemLog;
+    private ActivityLogView? _errorLog;
+
+    public ActivityLogView RepoLog => _repoLog ??= new ActivityLogView(RepoActivity);
+
+    public ActivityLogView SystemLog => _systemLog ??= new ActivityLogView(Activity);
+
+    public ActivityLogView ErrorLog => _errorLog ??= new ActivityLogView(Activity, errorsOnly: true);
 
     public ObservableCollection<FileChange> Changes { get; } = [];
 
@@ -139,11 +153,11 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ToggleRightPanel() => IsRightPanelOpen = !IsRightPanelOpen;
 
-    /// <summary>접힌 오른쪽 단을 펴면서 그 탭(0 변경 내용 · 1 작업 로그 · 2 시스템 작업 로그)을 고른다.</summary>
+    /// <summary>접힌 오른쪽 단을 펴면서 그 탭(0 변경 내용 · 1 작업 로그 · 2 시스템 작업 로그 · 3 시스템 오류)을 고른다.</summary>
     [RelayCommand]
     private void ShowRightTab(string? index)
     {
-        RightTabIndex = int.TryParse(index, out var at) ? Math.Clamp(at, 0, 2) : 0;
+        RightTabIndex = int.TryParse(index, out var at) ? Math.Clamp(at, 0, 3) : 0;
         IsRightPanelOpen = true;
     }
 
@@ -354,7 +368,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     // ── 변경 내용(diff) ──────────────────────────────────────
-    // 계약: 0 변경 내용 · 1 작업 로그(고른 저장소) · 2 시스템 작업 로그(전체) — 변경 파일을 누르면 0 으로 옮긴다
+    // 계약: 0 변경 내용 · 1 작업 로그(고른 저장소) · 2 시스템 작업 로그(전체) · 3 시스템 오류(실패·충돌) — 변경 파일을 누르면 0 으로 옮긴다
     [ObservableProperty]
     private int _rightTabIndex;
 

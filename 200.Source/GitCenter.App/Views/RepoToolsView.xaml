@@ -136,7 +136,11 @@
                             <Button Content="{loc:Tr '이 주소로 바꾸기'}" Command="{Binding SetRemoteUrlCommand}"
                                     Margin="0,0,6,4" />
                             <Button Content="{loc:Tr 'Pull Request 만들기'}" Command="{Binding OpenPullRequestCommand}"
-                                    Style="{StaticResource PrimaryButton}" Margin="0,0,0,4" />
+                                    Style="{StaticResource PrimaryButton}" Margin="0,0,6,4" />
+                            <!-- 계약: 원격이 없는 저장소에만 보인다 — GitHub 저장소를 만들어 연결하고 첫 Push 까지 한다(MainViewModel.Publish.cs) -->
+                            <Button Content="{loc:Tr 'GitHub 에 새 저장소 만들어 연결'}" Command="{Binding OpenPublishCommand}"
+                                    Margin="0,0,0,4"
+                                    Visibility="{Binding SelectedRow.IsLocalOnly, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" />
                         </WrapPanel>
                     </StackPanel>
                 </Border>

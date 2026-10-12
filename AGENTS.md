@@ -24,6 +24,13 @@
   이 앱의 약속이고 설정으로도 열지 않는다. push 가 거부되면 「먼저 받아서 합쳐 주십시오」로 끝낸다.
   계약: 일괄 작업이 충돌·실패로 끝난 저장소는 목록 체크를 자동으로 푼다(`MainViewModel.UncheckStuck`) — 「이 저장소만 고르기」가 다시 체크한다.
   함정: `RepoHealth.NoRemote` 는 아무도 매기지 않는다 — 원격 없는 저장소의 「Push 전」 제외는 `RepoStatus.HasRemote`(`git remote` 한 번)가 한다.
+  ★ 계약: 원격이 없는 저장소에 일괄 Fetch·Pull·Merge·Push 를 걸면 git 을 부르지 않고 「건너뜀」으로 센다(`GitService.ExecuteAsync` 의 `NeedsRemote` 선판정) —
+  git 원문(`fatal: 'origin' does not appear…`)은 사용자가 못 읽는다(2026-10-12 사용자 지시). 그 결과는 `BulkNextAction.Publish` 로 저장소 줄의 「GitHub 에 올리기」를 깜빡인다.
+  계약: Fetch·Pull·Merge 의 git fatal 원문 셋(원격 없음·주소 틀림 · 접속 실패 · 인증 실패)은 `GitService.DescribeFailure` 가 우리말로 바꾼다 — 원문은 `Detail`(「자세히」)이 갖는다.
+  ★ 계약: GitHub 계정은 **gh CLI 의 로그인**이다(`Services/GitHubAccount`) — 토큰을 이 앱이 쥐지 않고, 제목 띠의 계정 칩(`AccountButton`)과 설정 「일반」 탭이 같은 객체를 본다.
+  로그인은 `gh auth login --web` 콘솔을 띄워 사람이 하고(JHJ 규약 §4), 시작 때는 Core `AppDeploy.GhAccount`(hosts.yml)만 읽고 누를 때 `gh api user` 로 확인한다. gh 가 없으면 칩이 「gh 없음」이 되고 설치 안내를 낸다.
+  ★ 계약: 「GitHub 에 올리기」(`Views/PublishLayer` · `MainViewModel.Publish.cs`)는 원격이 없는 저장소(`RepoRow.IsLocalOnly`)에만 보이고, `gh repo create --source --remote --push` 한 번으로 **만들기 + 연결 + 첫 Push** 를 한다 — 기본은 비공개(끄면 공개).
+  커밋이 없거나 원격이 이미 있으면 gh 를 부르기 전에 막는다. 여는 곳은 셋 — 저장소 줄 단추 · 상세 「작업」 탭 「GitHub 에 새 저장소 만들어 연결」 · 일괄 작업 「원격 없음」 건너뜀의 Nudge.
   계약: 「오류 보고」(상태 줄 · 시스템 작업 로그 탭)는 실패 기록 + 환경·설정 + 이벤트 로그를 복사하고 이슈 양식을 연다 — Git Center 구역은
   `Services/GitCenterDiagnostics` 하나이고 설정 창 「진단 보고서」도 같은 것을 쓴다. 저장소 경로·원격 주소는 `MaskRepo` 로 가린다.
 - 계약: **원격에 닿는 일은 사용자가 단추를 눌렀을 때만** 일어난다. 상태 읽기(`status`·`log`·`for-each-ref`)는 로컬만 본다.
@@ -40,7 +47,7 @@
   ⚠️ `JHJ_AI_USAGE` 는 **영어가 키**다 — 이 앱은 방향이 반대다. 섞어 쓰지 않는다(`LocCatalog` 가 양쪽을 다 받는다).
   계약: 브러시 키·팔레트 정본은 Core 의 `Theme/JhjTheme.cs` 다. 저장소 상태 색(`BehindBrush`·`AheadBrush`)은
   `App.AddGitBrushes` 가 공통 뜻 색(`InfoBrush`·`WarnBrush`)에 이름만 붙인 것이다.
-- ★ 계약: **모양의 정본은 `Styles.xaml` 하나다** — 창 XAML 은 거기 정의된 Style·Geometry 만 쓰고 색·크기를 직접 적지 않는다.
+- ★ 계약: **모양의 정본은 Core `Jhj.Core.Wpf/Theme/CoreStyles.xaml`(공통 — 치수 상수 · 글꼴 · 아이콘 · 글자 · 스크롤바 · 말풍선 · 단추 · 글상자 · 체크 · 고르는 상자 · 탭 · 카드)과 이 앱의 `Styles.xaml`(전용 — 제목 띠 · 창 단추 · 내비 · 알약 토글 · 검색칸 · 목록 줄 · 진행 막대 · 펼침 · 나누개 · 대시보드) 둘이다**(2026-10-12 이사 — 값의 정본은 이 앱 것이었다). 창 XAML 은 거기 정의된 Style·Geometry 만 쓰고 색·크기를 직접 적지 않는다. 공통 구역을 고칠 일은 Core 에서 하고 네 앱을 빌드한다.
   스크롤바·체크박스·콤보박스·말풍선·진행막대는 **템플릿을 새로 씌웠다**(Windows 기본은 어두운 테마에서 밝은 회색으로 남는다).
 - 함정: 알약 모서리를 `CornerRadius="999"` 로 주면 WPF 가 가로까지 둥글려 **타원**이 된다 — `Pill`(16)·`PillSm`(9)·`PillXs`(3) 중에서 고른다.
 - 함정: 글상자의 흐린 안내 문구(`Tag`)는 **바인딩으로** 켠다 — `ControlTemplate.Triggers` 의 `DataTrigger`(`Text` = "")는 켜지지 않았다.
@@ -75,7 +82,10 @@
   ⚠️ 창 단추 옆에 앱 단추를 두지 않는다 — 성격이 다른 둘이 한 줄에 섞이면 어색하다(2026-10-10 사용자 지적).
 - ★ 함정: `TabControl` 템플릿의 내용 자리는 반드시 **`x:Name="PART_SelectedContentHost"`** 다 —
   없으면 고른 탭의 내용이 **접근성 트리에 통째로 안 올라간다**(화면 낭독기도 UI 자동화도 못 읽는다. 2026-10-10 실측).
-- 계약: 오른쪽 단은 **「변경 내용」·「작업 로그」·「시스템 작업 로그」 세 탭**이다. 가운데에서 변경 파일을 고르면 `SelectedChange` 가 바뀌고 0번 탭으로 옮긴다.
+- 계약: 오른쪽 단은 **「변경 내용」·「작업 로그」·「시스템 작업 로그」·「시스템 오류」 네 탭**이다. 가운데에서 변경 파일을 고르면 `SelectedChange` 가 바뀌고 0번 탭으로 옮긴다.
+  계약: 로그 탭 셋은 몸통(`ActivityLogPane`)과 거르개(`ViewModels/ActivityLogView` — 아래 줄의 분류 알약 + 검색)를 함께 쓴다. 「시스템 오류」는 전체 기록에서 실패·충돌만 남긴 보기다 — 원본 목록은 `Activity` 하나다.
+  함정: 분류 알약은 `IsChecked` 양방향 바인딩이다 — Command 로 묶으면 UI 자동화·화면 낭독기의 토글이 분류를 못 바꾼다(2026-10-12 실측).
+  계약: 「병합」은 git 을 부르기 전에 커밋하지 않은 변경과 들어올 파일(`HEAD...<ref>`)이 겹치는지 본다(`GitService.OverlapWithIncomingAsync`) — 겹치면 실패로 끝내고 겹친 파일을 `Detail` 에 싣는다.
   계약: 가운데 상세 단은 탭 다섯이다 — 「변경 파일」·「브랜치」·「충돌」·「상태」·「작업」.
   계약: 「브랜치」 탭은 왼쪽 브랜치 목록 + 오른쪽 이력(최근 200건 · `MainViewModel.BranchLog.cs`)이다 — 원격에 없는 커밋에 「Push 전」을 달고, 판정은 로컬이 아는 원격 추적 ref 뿐이다.
   계약: 브랜치를 두 번 누르면 화면이 먼저 묻고 Switch 한다(`MainWindow.Repos.cs` → `SwitchBranchAsync`) — 강제 옵션이 없어 겹치는 변경이 있으면 git 이 거부한다.
@@ -102,6 +112,7 @@
 - ★ 계약: 브랜치 설정은 둘이다 — 「작업 브랜치」(`Settings.WorkBranch`, 내가 일하는 곳)와 「업로드 브랜치」(`Settings.UploadBranch`, 코드가 모이는 곳).
   저장소별 값(`Settings.RepoBranches`)이 공통 값을 덮고, 일괄 작업이 저장소마다 풀어 쓴다(`BulkOperationOptions.WorkBranchFor`·`UploadBranchFor`).
   계약: 「병합」은 고른 브랜치(비면 업로드 브랜치)를 `fetch` 한 뒤 지금 브랜치로 합치고, 「올리기」는 두 벌이다 — 지금(작업) 브랜치를 제 원격 브랜치로, 업로드 브랜치가 다르면 거기에도 `push <remote> HEAD:refs/heads/<업로드>` 한다 — force 없음.
+  계약: 업로드 브랜치로 올린 뒤 로컬의 같은 이름 브랜치도 빨리감기로 맞춘다(`GitService.SyncLocalUploadAsync` · `fetch .` 라 원격에 닿지 않는다) — 로컬에 없으면 만들지 않고, 갈라졌으면 그대로 둔다.
   계약: 지금 브랜치가 가져올 브랜치와 같으면 「병합」은 원격의 같은 브랜치(`<remote>/<브랜치>`)를 합친다 — 올리기가 거부된(갈라진) 저장소를 이 단추로 푼다. Pull 은 `--ff-only` 라 갈라지면 못 푼다.
   계약: 실패를 푸는 단추가 정해진 결과는 `BulkStepResult.NextAction`(`BulkNextAction`)에 그 이름을 싣고, 화면은 같은 이름을 `Nudge.Key` 로 단 단추를 깜빡인다(`Controls/Nudge.cs` · `MainViewModel.NudgeAction`). 다음 일괄 작업을 시작하면 꺼진다.
   함정: 접힌 단(Collapsed) 위의 덧그림은 WPF 가 지우지 않는다 — `Nudge` 가 단추의 `IsVisibleChanged` 를 따라 테를 함께 숨긴다(2026-10-11 「점검」 화면에 테가 남던 것).

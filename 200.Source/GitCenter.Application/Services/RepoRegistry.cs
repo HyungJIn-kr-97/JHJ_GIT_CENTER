@@ -70,6 +70,13 @@ public sealed class RepoRegistry(IEnumerable<IRepoSource> sources)
 
         var excluded = new HashSet<string>(settings.ExcludedIds, StringComparer.OrdinalIgnoreCase);
 
+        // 왜: 가장 깊은 루트가 먼저 맞아야 한다 — 루트가 겹치면 안쪽 루트의 기준이 이긴다
+        var roots = settings.ScanRoots
+            .Where(r => r.Enabled && r.GroupLevel > 0 && string.IsNullOrWhiteSpace(r.Group))
+            .Select(r => (Root: r, Key: RepoKey.ForPath(r.Path)))
+            .OrderByDescending(r => r.Key.Length)
+            .ToList();
+
         foreach (var entry in merged.Values)
         {
             entry.Excluded = excluded.Contains(entry.Id);
@@ -80,6 +87,8 @@ public sealed class RepoRegistry(IEnumerable<IRepoSource> sources)
                 refresh.Relinked.Add(entry.Name);
                 ApplyHealth(entry);
             }
+
+            ApplyRootGroup(entry, roots);
 
             refresh.Entries.Add(entry);
         }
@@ -144,6 +153,25 @@ public sealed class RepoRegistry(IEnumerable<IRepoSource> sources)
             local.RemoteUrl ??= remote.RemoteUrl;
             local.Owner ??= remote.Owner;
             merged.Remove(remote.Id);
+        }
+    }
+
+    /// 함정: 같은 저장소를 GitHub Desktop·수동 추가가 먼저 들고 오면 「바로 위 폴더」 이름이 남는다 — 합친 뒤에 루트 기준으로 다시 매긴다
+    private static void ApplyRootGroup(RepoEntry entry, List<(ScanRoot Root, string Key)> roots)
+    {
+        if (string.IsNullOrEmpty(entry.Path) || roots.Count == 0)
+        {
+            return;
+        }
+
+        var pathKey = RepoKey.ForPath(entry.Path);
+        foreach (var (root, key) in roots)
+        {
+            if (RepoKey.IsUnder(key, pathKey))
+            {
+                entry.DisplayGroup = RepoKey.GroupUnder(root.Path, entry.Path, root.GroupLevel);
+                return;
+            }
         }
     }
 

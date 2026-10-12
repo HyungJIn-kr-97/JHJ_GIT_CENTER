@@ -27,6 +27,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly BulkOperationRunner _runner;
     private readonly IGitRunner _gitRunner;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(1) };
+    private readonly DispatcherTimer _refreshLineTicker = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
 
     private readonly List<RepoRow> _all = [];
     private CancellationTokenSource? _work;
@@ -54,6 +55,7 @@ public sealed partial class MainViewModel : ObservableObject
         InitBranchOptions();
         PageIndex = Math.Clamp(settings.StartPage, 0, 1);
         SortMode = settings.RepoSort is "state" or "recent" ? settings.RepoSort : "name";
+        _isSummaryView = settings.RepoSummaryView;
         ExcludeText = string.Join('\n', settings.CommonExcludes);
         InitDashboardCharts();
 
@@ -63,6 +65,10 @@ public sealed partial class MainViewModel : ObservableObject
 
         _timer.Tick += async (_, _) => await OnTimerAsync().ConfigureAwait(true);
         _timer.Start();
+
+        // 왜: 갱신 줄의 남은 시간은 초 단위로 줄어든다 — 갱신 주기와 따로 1초마다 문구만 다시 쓴다
+        _refreshLineTicker.Tick += (_, _) => OnPropertyChanged(nameof(RefreshLine));
+        _refreshLineTicker.Start();
     }
 
     public AppSettings Settings { get; }
@@ -80,7 +86,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<RepoRow> Rows { get; } = [];
 
+    /// 계약: 저장소를 가리지 않은 전체 기록 — 오른쪽 단의 「시스템 작업 로그」 탭이 그린다
     public ObservableCollection<ActivityEntry> Activity { get; } = [];
+
+    /// 계약: 고른 저장소의 기록만 — 「작업 로그」 탭이 그린다. 고른 줄이 바뀌면 다시 채운다
+    public ObservableCollection<ActivityEntry> RepoActivity { get; } = [];
 
     public ObservableCollection<FileChange> Changes { get; } = [];
 
@@ -129,11 +139,11 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ToggleRightPanel() => IsRightPanelOpen = !IsRightPanelOpen;
 
-    /// <summary>접힌 오른쪽 단을 펴면서 그 탭(0 변경 내용 · 1 작업 로그)을 고른다.</summary>
+    /// <summary>접힌 오른쪽 단을 펴면서 그 탭(0 변경 내용 · 1 작업 로그 · 2 시스템 작업 로그)을 고른다.</summary>
     [RelayCommand]
     private void ShowRightTab(string? index)
     {
-        RightTabIndex = index == "1" ? 1 : 0;
+        RightTabIndex = int.TryParse(index, out var at) ? Math.Clamp(at, 0, 2) : 0;
         IsRightPanelOpen = true;
     }
 
@@ -165,13 +175,15 @@ public sealed partial class MainViewModel : ObservableObject
         _ => "이름순"
     };
 
-    public bool HasActiveFilter => GroupFilter is not null || StateFilter is not null || MineFilter is not null || BranchFilter is not null;
+    public bool HasActiveFilter => GroupFilter is not null || StateFilter is not null || MineFilter is not null
+        || BranchFilter is not null || BranchScope is not null;
 
     public string ActiveFilterText => string.Join(" · ", new[]
     {
         GroupFilter is null ? null : "그룹 " + (GroupFilter.Length == 0 ? "그룹 없음" : GroupFilter),
         StateFilter is null ? null : "상태 " + StateFilter,
         MineFilter,
+        BranchScope is null ? null : ScopeLabel(BranchScope),
         BranchFilter is null ? null : "브랜치 " + BranchFilter
     }.Where(part => part is not null));
 
@@ -185,6 +197,7 @@ public sealed partial class MainViewModel : ObservableObject
         GroupFilter = null;
         StateFilter = null;
         MineFilter = null;
+        BranchScope = null;
         BranchFilter = null;
     }
 
@@ -280,6 +293,28 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _busyText = string.Empty;
 
+    /// 계약: 창 맨 아래 상태 줄의 글 — 하는 일이 있으면 그 이름(BusyText), 없으면 「준비」다. 줄은 늘 보인다
+    public string StatusBarText => BusyText.Length > 0 ? BusyText : Loc.T("준비");
+
+    /// 계약: 상태 줄의 점 색을 가른다 — 「상태 새로 고침」은 IsBusy 를 켜지 않아 BusyText 로 판정한다
+    public bool IsWorkingNow => BusyText.Length > 0;
+
+    /// 계약: 가장 최근 작업 기록 한 건이다 — 커밋·Push·Merge·전환·충돌 풀이 등 기록을 남기는 모든 일이 PushActivity 를 거쳐 여기 온다
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LastActivityLine))]
+    private ActivityEntry? _lastActivity;
+
+    /// 계약: 상태 줄 가운데의 한 줄 — 「22:41:07 · alpha · 커밋했습니다」 꼴이고 여러 줄 메시지는 첫 줄만 쓴다
+    public string LastActivityLine => LastActivity is { } a
+        ? $"{a.When.ToLocalTime():HH:mm:ss} · {a.RepoName} · {a.Message.Split('\n')[0].Trim()}"
+        : string.Empty;
+
+    partial void OnBusyTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(StatusBarText));
+        OnPropertyChanged(nameof(IsWorkingNow));
+    }
+
     /// 계약: 실패한 일괄 작업 뒤에 누를 단추의 이름(BulkNextAction)이다 — 그 이름을 Nudge.Key 로 단 단추가 깜빡인다. 비면 아무것도 안 깜빡인다
     [ObservableProperty]
     private string _nudgeAction = string.Empty;
@@ -319,7 +354,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     // ── 변경 내용(diff) ──────────────────────────────────────
-    // 계약: 0 변경 내용 · 1 작업 로그 — 변경 파일을 누르면 0 으로 옮긴다
+    // 계약: 0 변경 내용 · 1 작업 로그(고른 저장소) · 2 시스템 작업 로그(전체) — 변경 파일을 누르면 0 으로 옮긴다
     [ObservableProperty]
     private int _rightTabIndex;
 
@@ -485,6 +520,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         AddActivity("그룹", StepOutcome.Success, $"그룹 「{group}」을(를) 지웠습니다 — 저장소는 그대로입니다.");
         RefreshGroupChips();
+        RefreshManagedGroups();
         ApplyFilter();
         await SaveSettingsAsync().ConfigureAwait(true);
     }
@@ -627,6 +663,9 @@ public sealed partial class MainViewModel : ObservableObject
                 var status = await _git.ReadStatusAsync(row.Entry, CancellationToken.None).ConfigureAwait(true);
                 row.Status = status;
                 row.CommitDays = await _git.ReadCommitDaysAsync(row.Entry, CalendarDays, CancellationToken.None).ConfigureAwait(true);
+                row.FileExtensions = await _git.ReadFileExtensionsAsync(row.Entry, CancellationToken.None).ConfigureAwait(true);
+                row.CommitFacts = await _git.ReadCommitFactsAsync(row.Entry, CalendarDays, CancellationToken.None).ConfigureAwait(true);
+                row.ObjectSizeKib = await _git.ReadObjectSizeAsync(row.Entry, CancellationToken.None).ConfigureAwait(true);
                 // 계약: 줄마다 「언제 읽었나」를 남긴다 — 목록에 경과로, 상세에 정확한 시각으로 보인다
                 row.RefreshedAt = DateTimeOffset.Now;
             }
@@ -664,6 +703,10 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnSelectedRowChanged(RepoRow? value)
     {
         Settings.LastSelectedRepoId = value?.Id;
+
+        // 계약: 오른쪽 「작업 로그」는 고른 저장소 것만 보인다 — 줄이 바뀌면 다시 세운다
+        RefreshRepoActivity();
+
         if (value is not null)
         {
             _ = LoadDetailAsync(value);
@@ -673,6 +716,8 @@ public sealed partial class MainViewModel : ObservableObject
             SetChanges([]);
             Branches.Clear();
             Conflicts.Clear();
+            StatusReasons.Clear();
+            Stashes.Clear();
             SelectedChange = null;
         }
     }
@@ -717,8 +762,39 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedCount));
     }
 
+    /// 계약: 「2026-10-11 오후 10:03 갱신 · 3분 전 · 다음 22:08 · 4:12 후」 — 상태를 마지막으로 읽은 때·그 뒤 경과·다음 자동 갱신(설정 「상태 다시 읽기(분)」)이다
+    /// 계약: 1초 타이머(`_refreshLineTicker`)가 다시 그린다 — 남은 시간은 JHJ_AI_USAGE 와 같은 「분:초」다. 주기가 0 이면 자동 갱신이 꺼진 것이다
+    public string RefreshLine
+    {
+        get
+        {
+            if (_lastStatus == DateTimeOffset.MinValue)
+            {
+                return string.Empty;
+            }
+
+            var at = _lastStatus.ToLocalTime();
+            var stamp = $"{at:yyyy-MM-dd} {at.ToString("tt h:mm", System.Globalization.CultureInfo.CurrentCulture)}";
+            var done = $"{Loc.T("{0} 갱신", stamp)} · {RepoRow.Ago(_lastStatus)}";
+            if (Settings.StatusRefreshMinutes <= 0)
+            {
+                return $"{done} · {Loc.T("자동 갱신 꺼짐")}";
+            }
+
+            var next = _lastStatus.AddMinutes(Settings.StatusRefreshMinutes);
+            var left = next - DateTimeOffset.Now;
+            if (left < TimeSpan.Zero)
+            {
+                left = TimeSpan.Zero;
+            }
+
+            return $"{done} · {Loc.T("다음 {0} · {1} 후", next.ToLocalTime().ToString("HH:mm"), $"{(int)left.TotalMinutes}:{left.Seconds:00}")}";
+        }
+    }
+
     private void UpdateStatusLine()
     {
+        OnPropertyChanged(nameof(RefreshLine));
         var dirty = _all.Count(r => r.Status?.IsDirty ?? false);
         var behind = _all.Count(r => (r.Status?.Behind ?? 0) > 0);
         var ahead = _all.Count(r => (r.Status?.Ahead ?? 0) > 0);
@@ -888,6 +964,8 @@ public sealed partial class MainViewModel : ObservableObject
         SetChanges([]);
         Branches.Clear();
         Conflicts.Clear();
+        StatusReasons.Clear();
+        Stashes.Clear();
 
         if (row.Entry.Health != RepoHealth.Ok || !_gitRunner.IsGitAvailable)
         {
@@ -913,7 +991,12 @@ public sealed partial class MainViewModel : ObservableObject
                 Branches.Add(branch);
             }
 
+            // 계약: 브랜치 탭은 지금 브랜치의 이력부터 보인다
+            SelectedBranch = Branches.FirstOrDefault(b => b.IsCurrent);
+
             DetailTabIndex = 0;
+
+            await LoadStatusTabAsync(row, generation).ConfigureAwait(true);
 
             if (row.Status?.HasConflict ?? false)
             {
@@ -932,6 +1015,7 @@ public sealed partial class MainViewModel : ObservableObject
                 DetailTabIndex = 2;
             }
 
+            OnPropertyChanged(nameof(ConflictOverview));
             OnPropertyChanged(nameof(CanConcludeMerge));
         }
         catch (Exception ex)
@@ -1041,32 +1125,67 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// 계약: 작업 로그는 화면에만 쌓인다 — 지워도 파일 로그(logs\)는 그대로 남는다
     [RelayCommand]
-    private void ClearActivity() => Activity.Clear();
-
-    private async Task RunBulkAsync(BulkOperationKind kind)
+    private void ClearActivity()
     {
-        if (IsBusy || !_gitRunner.IsGitAvailable)
+        Activity.Clear();
+        RepoActivity.Clear();
+    }
+
+    /// 계약: only 를 주면 그 저장소에만, 안 주면 보이는 줄 중 고른 것에 돈다 — 시작하지 못했으면 null 을 준다
+    /// 계약: ownRemote 는 「병합」이 원격의 같은 브랜치를 합치게 하고, preset 은 이미 받은 브랜치 확인을 다시 묻지 않게 한다(MainViewModel.PushCheck.cs 의 이어 하기)
+    private async Task<IReadOnlyList<BulkStepResult>?> RunBulkAsync(
+        BulkOperationKind kind, IReadOnlyList<RepoRow>? only = null, bool ownRemote = false,
+        IReadOnlyDictionary<string, string>? preset = null, bool showGap = true)
+    {
+        if (IsBusy || IsOffBranchOpen || !_gitRunner.IsGitAvailable)
         {
-            return;
+            return null;
         }
 
-        var targets = SelectedShown();
+        var targets = only ?? SelectedShown();
         if (targets.Count == 0)
         {
             AddActivity("일괄", StepOutcome.Skipped, "고른 저장소가 없습니다.");
-            return;
+            return null;
         }
 
         if (kind is BulkOperationKind.CommitAll or BulkOperationKind.CommitAndPush && string.IsNullOrWhiteSpace(CommitMessage))
         {
             AddActivity("일괄", StepOutcome.Skipped, "커밋 메시지를 적어 주십시오.");
-            return;
+            return null;
         }
+
+        IReadOnlyList<BulkStepResult>? done = null;
+
+        var mergeSource = kind is BulkOperationKind.MergeDefaultIntoCurrent && !ownRemote ? MergeSource?.Trim() ?? string.Empty : string.Empty;
+        var options = new BulkOperationOptions
+        {
+            MergeOwnRemote = ownRemote,
+            CommitMessage = FillCommitText(CommitMessage, kind, targets),
+            CommitBody = FillCommitText(CommitBody, kind, targets),
+            FastForwardOnly = Settings.FastForwardOnly,
+            AutoStash = Settings.AutoStashBeforePull,
+            RemoteName = Settings.RemoteName,
+            WorkBranch = Settings.WorkBranch,
+            UploadBranch = Settings.UploadBranch,
+            RepoBranches = new Dictionary<string, RepoBranchRule>(Settings.RepoBranches, StringComparer.OrdinalIgnoreCase),
+            MergeSource = mergeSource,
+            TimeoutSeconds = Settings.GitTimeoutSeconds
+        };
+
+        // 계약: 작업 브랜치가 아닌 저장소는 건너뛰기 전에 먼저 묻는다 — 체크한 것만 지금 브랜치 그대로 진행한다(MainViewModel.PushCheck.cs)
+        if ((preset ?? await ConfirmOffBranchAsync(kind, targets, options, ownRemote).ConfigureAwait(true)) is not { } confirmed)
+        {
+            AddActivity(Describe(kind), StepOutcome.Skipped, "취소했습니다.");
+            return null;
+        }
+
+        options.ConfirmedBranches = confirmed;
+        _lastConfirmed = confirmed;
 
         _work = new CancellationTokenSource();
         IsBusy = true;
         NudgeAction = string.Empty;
-        var mergeSource = kind is BulkOperationKind.MergeDefaultIntoCurrent ? MergeSource?.Trim() ?? string.Empty : string.Empty;
         BusyText = mergeSource.Length > 0
             ? $"{Describe(kind)}({mergeSource}) — 저장소 {targets.Count}개"
             : $"{Describe(kind)} — 저장소 {targets.Count}개";
@@ -1080,20 +1199,6 @@ public sealed partial class MainViewModel : ObservableObject
             row.IsWorking = true;
         }
 
-        var options = new BulkOperationOptions
-        {
-            CommitMessage = FillCommitText(CommitMessage, kind, targets),
-            CommitBody = FillCommitText(CommitBody, kind, targets),
-            FastForwardOnly = Settings.FastForwardOnly,
-            AutoStash = Settings.AutoStashBeforePull,
-            RemoteName = Settings.RemoteName,
-            WorkBranch = Settings.WorkBranch,
-            UploadBranch = Settings.UploadBranch,
-            RepoBranches = new Dictionary<string, RepoBranchRule>(Settings.RepoBranches, StringComparer.OrdinalIgnoreCase),
-            MergeSource = mergeSource,
-            TimeoutSeconds = Settings.GitTimeoutSeconds
-        };
-
         var byId = targets.ToDictionary(r => r.Id, StringComparer.OrdinalIgnoreCase);
         var progress = new Progress<BulkStepResult>(step =>
         {
@@ -1105,8 +1210,7 @@ public sealed partial class MainViewModel : ObservableObject
                 row.LastOutcome = step.Outcome;
             }
 
-            Activity.Insert(0, ActivityEntry.From(step));
-            TrimActivity();
+            PushActivity(ActivityEntry.From(step));
         });
 
         try
@@ -1114,6 +1218,7 @@ public sealed partial class MainViewModel : ObservableObject
             var results = await _runner
                 .RunAsync(targets.Select(r => r.Entry).ToList(), kind, options, Settings.Concurrency, progress, _work.Token)
                 .ConfigureAwait(true);
+            done = results;
 
             var ok = results.Count(r => r.Outcome == StepOutcome.Success);
             var conflict = results.Count(r => r.Outcome == StepOutcome.Conflict);
@@ -1150,6 +1255,12 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         await RefreshStatusAsync().ConfigureAwait(true);
+        if (showGap)
+        {
+            ShowPushGapAfter(kind, targets);
+        }
+
+        return done;
     }
 
     // ── 바깥 도구로 열기 ─────────────────────────────────────
@@ -1244,9 +1355,9 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    public void AddActivity(string scope, StepOutcome outcome, string message)
-    {
-        Activity.Insert(0, new ActivityEntry
+    /// 계약: 저장소를 가리지 않는 기록이다 — RepoId 가 없으므로 「시스템 작업 로그」 탭에만 보인다
+    public void AddActivity(string scope, StepOutcome outcome, string message) =>
+        PushActivity(new ActivityEntry
         {
             When = DateTimeOffset.Now,
             RepoName = scope,
@@ -1254,8 +1365,36 @@ public sealed partial class MainViewModel : ObservableObject
             Message = message
         });
 
+    /// 계약: 기록을 넣는 길은 이것 하나다 — 전체와 저장소별 목록이 어긋나지 않게
+    private void PushActivity(ActivityEntry entry)
+    {
+        LastActivity = entry;
+        Activity.Insert(0, entry);
         TrimActivity();
+
+        if (SelectedRow is { } row && entry.Belongs(row.Id))
+        {
+            RepoActivity.Insert(0, entry);
+            TrimRepoActivity();
+        }
     }
+
+    /// 계약: 고른 저장소의 기록만 다시 세운다 — 줄을 바꿀 때마다 부른다
+    private void RefreshRepoActivity()
+    {
+        RepoActivity.Clear();
+        if (SelectedRow is not { } row)
+        {
+            return;
+        }
+
+        foreach (var entry in Activity.Where(a => a.Belongs(row.Id)).Take(RepoActivityLimit))
+        {
+            RepoActivity.Add(entry);
+        }
+    }
+
+    private const int RepoActivityLimit = 200;
 
     /// 함정: 로그를 끝없이 쌓으면 긴 세션에서 화면이 느려진다 — 500줄에서 자른다
     private void TrimActivity()
@@ -1263,6 +1402,14 @@ public sealed partial class MainViewModel : ObservableObject
         while (Activity.Count > 500)
         {
             Activity.RemoveAt(Activity.Count - 1);
+        }
+    }
+
+    private void TrimRepoActivity()
+    {
+        while (RepoActivity.Count > RepoActivityLimit)
+        {
+            RepoActivity.RemoveAt(RepoActivity.Count - 1);
         }
     }
 
@@ -1274,6 +1421,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         var now = DateTimeOffset.Now;
+        OnPropertyChanged(nameof(RefreshLine));
 
         // 왜: 「3분 전」은 값이 그대로여도 시계가 흐르면 틀린 글자가 된다 — 1분마다 다시 그린다
         foreach (var row in _all)
@@ -1345,11 +1493,17 @@ public sealed record StatChip(string Label, int Value, string Tone, bool ShowDot
 public sealed record GroupChip(string? Key, string Label, int Count, bool IsActive, bool IsUserGroup);
 
 /// <summary>오른쪽 작업 로그의 한 줄.</summary>
+/// 계약: RepoId 가 있으면 그 저장소의 일이다 — 「작업 로그」 탭은 고른 저장소 것만, 「시스템 작업 로그」 탭은 전부 보인다
 public sealed class ActivityEntry
 {
     public required DateTimeOffset When { get; init; }
 
     public required string RepoName { get; init; }
+
+    public string? RepoId { get; init; }
+
+    public bool Belongs(string repoId) =>
+        RepoId is not null && RepoId.Equals(repoId, StringComparison.OrdinalIgnoreCase);
 
     public required StepOutcome Outcome { get; init; }
 
@@ -1365,6 +1519,7 @@ public sealed class ActivityEntry
     {
         When = step.StartedAt,
         RepoName = step.RepoName,
+        RepoId = step.RepoId,
         Outcome = step.Outcome,
         Message = $"{MainViewModel.Describe(step.Kind)} — {step.Message}",
         Detail = step.ConflictPaths.Count > 0

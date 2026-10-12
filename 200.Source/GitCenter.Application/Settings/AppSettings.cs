@@ -241,6 +241,9 @@ public sealed class AppSettings
     /// 계약: 그룹 안 정렬 — "name" · "state" · "recent". 보던 상태라 「기본값으로」가 건드리지 않는다
     public string RepoSort { get; set; } = "name";
 
+    /// 계약: 저장소 줄을 두 줄로 줄여 보는 「요약 보기」 — 보던 상태라 「기본값으로」가 건드리지 않는다
+    public bool RepoSummaryView { get; set; }
+
     public bool DiagnosticsEnabled { get; set; } = true;
 
     /// 계약: 예약 자동 업데이트 세 칸 — 화면은 Core 의 UpdatePanel, 규격은 JHJ_CS_CORE/300.Docs/030.설정-창-기본-규격.md §2 다
@@ -304,6 +307,53 @@ public sealed class AppSettings
             DiagnosticsEnabled = d.DiagnosticsEnabled;
         }
     }
+
+    /// <summary>저장소·그룹에 손으로 매긴 것을 전부 비운다 — 루트와 출처 설정은 남는다.</summary>
+    /// 계약: 「기본값으로」가 일부러 남기는 값(수동 추가 · 숨김 · 그룹)을 지우는 유일한 길이다 — 화면이 먼저 확인을 받는다
+    public void ClearMapping()
+    {
+        Groups = [];
+        RepoGroups = new(StringComparer.OrdinalIgnoreCase);
+        CollapsedGroups = [];
+        ManualPaths = [];
+        ExcludedIds = [];
+        RepoBranches = new(StringComparer.OrdinalIgnoreCase);
+        WorkingRepos = new(StringComparer.OrdinalIgnoreCase);
+        LastSelectedRepoId = null;
+    }
+
+    /// <summary>모든 칸을 처음 설치한 값으로 되돌린다 — 루트까지 비운다.</summary>
+    /// 왜: 칸을 하나씩 적으면 새 설정을 더할 때 빠진다 — 쓸 수 있는 속성을 통째로 옮긴다
+    public void ResetEverything()
+    {
+        var d = new AppSettings { Language = Language };
+        foreach (var property in typeof(AppSettings).GetProperties().Where(p => p is { CanRead: true, CanWrite: true }))
+        {
+            property.SetValue(this, property.GetValue(d));
+        }
+    }
+
+    /// <summary>폴더 하나를 기준 루트로 삼는다 — 그 폴더와 겹치는 루트를 갈아 끼우고, 그 아래 저장소에 손으로 매긴 그룹을 푼다.</summary>
+    /// 계약: 폴더 밖 저장소의 그룹과 다른 루트는 건드리지 않는다. 비게 된 사용자 그룹은 함께 지운다
+    public void RemapToFolder(string folder, int groupLevel, int depth)
+    {
+        var rootKey = Services.RepoKey.ForPath(folder);
+
+        ScanRoots.RemoveAll(r =>
+        {
+            var key = Services.RepoKey.ForPath(r.Path);
+            return key == rootKey || Services.RepoKey.IsUnder(rootKey, key);
+        });
+        ScanRoots.Add(new ScanRoot { Path = folder, Depth = depth, GroupLevel = groupLevel });
+
+        foreach (var id in RepoGroups.Keys.Where(id => Services.RepoKey.IsUnder(rootKey, id)).ToList())
+        {
+            RepoGroups.Remove(id);
+        }
+
+        Groups.RemoveAll(g => !RepoGroups.Values.Contains(g, StringComparer.OrdinalIgnoreCase));
+        CollapsedGroups = [];
+    }
 }
 
 public enum SettingsGroup
@@ -337,6 +387,9 @@ public sealed class ScanRoot
 
     /// 계약: 이 루트에서 찾은 저장소에 붙일 묶음 이름 — 비면 바로 위 폴더 이름을 쓴다
     public string? Group { get; set; }
+
+    /// 계약: 루트에서 몇 단계 아래 폴더까지를 묶음 이름으로 쓸지 — 0 은 「바로 위 폴더」(옛 동작), 1·2 는 RepoKey.GroupUnder 다
+    public int GroupLevel { get; set; }
 }
 
 /// <summary>목록을 명령 출력으로 채우는 출처(예: gh repo list · dir /b).</summary>

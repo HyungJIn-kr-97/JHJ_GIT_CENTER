@@ -18,9 +18,15 @@ internal static class IconPresets
     public const string Network = "network";
 
     public const string Glyph = "glyph";
+    public const string GoldJ = "gold-j";
+    public const string Classic = "classic";
 
+    // 계약: 기본 그림(app-icon.ico)은 금박 JG 다 — 모든 크기에 두 글자다(make_jhj_icon.py --style foil --mono JG)
+    // 계약: 「JHJ + 가지」는 금박으로 바꾸기 전의 기본 그림이다 — 고르던 사람이 잃지 않게 선택지로 남긴다
     public static AppIconPreset[] All =>
     [
+        AppIcon.IcoPreset(GoldJ, "금박 J", "pack://application:,,,/Resources/app-icon-gold-j.ico"),
+        AppIcon.IcoPreset(Classic, "JHJ + 가지", "pack://application:,,,/Resources/app-icon-classic.ico"),
         AppIcon.IcoPreset(Glyph, "가지 모양", "pack://application:,,,/Resources/app-icon-glyph.ico"),
         new AppIconPreset(Connect, "연결", px => Draw(px, DrawConnect)),
         new AppIconPreset(Network, "그물", px => Draw(px, DrawNetwork)),

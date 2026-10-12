@@ -448,6 +448,8 @@
         <GradientStop Color="#66000000" Offset="0.5" />
         <GradientStop Color="#00000000" Offset="1" />
     </LinearGradientBrush>
+    <!-- 계약: 확인 층(OffBranchLayer · PushGapLayer) 뒤를 가리는 막 — 테마와 무관하게 어둡다 -->
+    <SolidColorBrush x:Key="ScrimBrush" Color="#8C0B0D14" />
     <SolidColorBrush x:Key="TitleInkBrush" Color="#FFF4F5FA" />
     <SolidColorBrush x:Key="TitleMutedBrush" Color="#FF9AA1B8" />
     <SolidColorBrush x:Key="TitleHoverBrush" Color="#1FFFFFFF" />
@@ -1060,6 +1062,21 @@
         <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
     </Style>
 
+    <!-- 계약: 일괄 작업 띠의 묶음 하나 — 위에 「번호 + 이름」 한 줄, 아래에 그 묶음의 단추들 -->
+    <Style x:Key="ActionGroup" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource SubtleOverlayBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        <Setter Property="Padding" Value="10,6,10,8" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="StepBadge" TargetType="Border" BasedOn="{StaticResource Chip}">
+        <Setter Property="Padding" Value="6,0" />
+        <Setter Property="Margin" Value="0,0,7,0" />
+    </Style>
+
     <Style x:Key="VDivider" TargetType="Border">
         <Setter Property="Width" Value="1" />
         <Setter Property="Background" Value="{DynamicResource DividerBrush}" />
@@ -1080,7 +1097,7 @@
     <SolidColorBrush x:Key="DiffDelBackBrush" Color="#24F87171" />
 
     <Style x:Key="ListRow" TargetType="ListBoxItem">
-        <Setter Property="Padding" Value="9,7" />
+        <Setter Property="Padding" Value="9,5" />
         <Setter Property="Margin" Value="0,1" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 계약: 설치 파일 — Windows 10/11 에 기본으로 있는 .NET Framework 4.8 로 만들어 런타임 없이 돈다. 몸통은 JHJ_CS_CORE 의 Jhj.Core.Setup(소스 링크)이다
+       계약: 업데이트 꾸러미(zip)를 품은 오프라인 설치 파일이다 — 800.Deploy\publish.ps1 이 -p:PackageZip=<zip> 으로 넣는다. 품지 않고 빌드하면 최신 릴리스를 받아 깐다
+       규격 — JHJ_CS_CORE/300.Docs/040.설치-업데이트-규격.md -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>JHJ_Git-Center_Setup</AssemblyName>
+    <RootNamespace>GitCenter.Setup</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationIcon>..\GitCenter.App\Resources\app-icon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>JHJ Git 통합 관리 센터 설치</Product>
+    <AssemblyTitle>JHJ Git 통합 관리 센터 설치</AssemblyTitle>
+    <JhjCoreProjects>setup</JhjCoreProjects>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(PackageZip)' != '' AND Exists('$(PackageZip)')">
+    <EmbeddedResource Include="$(PackageZip)" LogicalName="package.zip" Link="package.zip" />
+  </ItemGroup>
+
+  <Import Project="..\..\..\JHJ_CS_CORE\200.Source\100.Core\cs\Jhj.Core.props" />
+
+</Project>

@@ -45,7 +45,9 @@ public sealed class RootScanSource : IRepoSource
                     Name = RepoKey.NameOf(path),
                     Path = path,
                     Sources = [Kind],
-                    DisplayGroup = string.IsNullOrWhiteSpace(root.Group) ? RepoKey.GroupOf(path) : root.Group!,
+                    DisplayGroup = string.IsNullOrWhiteSpace(root.Group)
+                        ? RepoKey.GroupUnder(root.Path, path, root.GroupLevel)
+                        : root.Group!,
                     LastSeenUtc = DateTimeOffset.UtcNow
                 });
             }
@@ -58,6 +60,10 @@ public sealed class RootScanSource : IRepoSource
 
         return Task.FromResult(result);
     }
+
+    /// <summary>설정을 바꾸지 않고 폴더 하나만 훑는다 — 설정 화면의 「미리 보기」가 쓴다.</summary>
+    public static IReadOnlyList<string> Find(string root, int depth, CancellationToken cancellationToken) =>
+        Directory.Exists(root) ? Scan(root, Math.Max(0, depth), cancellationToken).ToList() : [];
 
     private static IEnumerable<string> Scan(string root, int depth, CancellationToken cancellationToken)
     {

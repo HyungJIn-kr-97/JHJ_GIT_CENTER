@@ -75,8 +75,32 @@ public interface IGitService
     /// 계약: 지금 브랜치에서 최근 days 일 동안의 커밋 날짜 — 커밋 하나에 날짜 하나다(로컬만 읽는다)
     Task<IReadOnlyList<DateOnly>> ReadCommitDaysAsync(RepoEntry repo, int days, CancellationToken cancellationToken);
 
+    /// 계약: 추적 중인 파일을 확장자(소문자 · 점 포함)별로 센다 — 확장자가 없으면 빈 열쇠다(로컬만 읽는다)
+    Task<IReadOnlyDictionary<string, int>> ReadFileExtensionsAsync(RepoEntry repo, CancellationToken cancellationToken);
+
+    /// 계약: 지금 브랜치의 최근 days 일 커밋을 작성자별 · 시간대별로 센다 — 로컬만 읽는다
+    Task<CommitFacts> ReadCommitFactsAsync(RepoEntry repo, int days, CancellationToken cancellationToken);
+
+    /// 계약: reference(브랜치 · 원격 추적 ref)의 커밋을 새것부터 max 건 준다 — 읽기뿐이다
+    Task<IReadOnlyList<CommitInfo>> ReadBranchLogAsync(RepoEntry repo, string reference, int max, CancellationToken cancellationToken);
+
+    /// 계약: reference 의 커밋 중 어느 원격 추적 ref 에도 없는 것(아직 Push 안 한 것)의 sha 다 — 로컬이 아는 ref 로만 가른다
+    Task<IReadOnlySet<string>> ReadUnpushedAsync(RepoEntry repo, string reference, int max, CancellationToken cancellationToken);
+
+    /// 계약: 그 브랜치로 체크아웃을 바꾼다 — 원격 브랜치면 같은 이름의 로컬로(없으면 추적 브랜치를 만들어) 옮긴다. 강제 옵션은 없다
+    Task<(bool Ok, string Message)> SwitchBranchAsync(RepoEntry repo, BranchInfo branch, CancellationToken cancellationToken);
+
+    /// 계약: 일괄 커밋·올리기가 「작업 브랜치 아님」으로 건너뛸 저장소면 (지금 브랜치, 작업 브랜치)를, 아니면 null 을 준다 — 읽기뿐이다
+    Task<(string Current, string Work)?> ReadOffWorkBranchAsync(RepoEntry repo, BulkOperationOptions options, CancellationToken cancellationToken);
+
+    /// 계약: .git 객체가 디스크에서 차지하는 크기(KiB · 풀린 것 + 묶인 것)다 — 작업 트리는 세지 않는다
+    Task<long> ReadObjectSizeAsync(RepoEntry repo, CancellationToken cancellationToken);
+
     /// 계약: 커밋한 날이 from~to(양끝 포함)인 지금 브랜치의 커밋을 새것부터 준다 — 읽기뿐이다
     Task<IReadOnlyList<CommitInfo>> ReadCommitsAsync(RepoEntry repo, DateOnly from, DateOnly to, CancellationToken cancellationToken);
+
+    /// 계약: stash 목록을 새것부터 준다 — 읽기뿐이고 작업 트리·인덱스를 건드리지 않는다
+    Task<IReadOnlyList<StashEntry>> ReadStashesAsync(RepoEntry repo, CancellationToken cancellationToken);
 
     /// 계약: 구간마다 고른 대로 파일을 다시 써서 스테이지한다 — 쓰기 전의 작업 파일은 .git 안에 백업한다
     Task<ConflictActionResult> ResolveConflictAsync(RepoEntry repo, string path, IReadOnlyList<ConflictChoice> choices, CancellationToken cancellationToken);
@@ -131,6 +155,12 @@ public sealed class BulkOperationOptions
 
     /// 계약: 「병합」이 이번 한 번 가져올 브랜치 — 비면 저장소마다 업로드 브랜치를 가져온다
     public string MergeSource { get; set; } = string.Empty;
+
+    /// 계약: 저장소 Id → 사용자가 「작업 브랜치가 아니어도 이 브랜치 그대로」라고 확인한 브랜치 — 지금 브랜치가 이 값일 때만 건너뛰지 않는다
+    public IReadOnlyDictionary<string, string> ConfirmedBranches { get; set; } = new Dictionary<string, string>();
+
+    /// 계약: 켜면 「병합」이 MergeSource·업로드 브랜치 대신 원격의 같은 브랜치(<remote>/<지금 브랜치>)를 합친다 — 올리기가 거부된 저장소를 푸는 길이다
+    public bool MergeOwnRemote { get; set; }
 
     public string WorkBranchFor(RepoEntry repo) =>
         RepoBranches.TryGetValue(repo.Id, out var rule) && rule.Work.Length > 0 ? rule.Work : WorkBranch.Trim();

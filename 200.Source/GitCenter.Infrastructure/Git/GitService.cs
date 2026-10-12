@@ -136,6 +136,133 @@ public sealed class GitService(IGitRunner runner) : IGitService
         return found;
     }
 
+    public async Task<IReadOnlyDictionary<string, int>> ReadFileExtensionsAsync(RepoEntry repo, CancellationToken cancellationToken)
+    {
+        // 계약: 추적 중인 파일만 센다 — 무시된 산출물(node_modules · bin)은 ls-files 에 안 나온다
+        // 함정: quotepath 를 끄지 않으면 한글 경로가 따옴표로 묶여 끝 따옴표가 확장자에 붙는다
+        var files = await _runner.RunAsync(repo.Path,
+            ["-c", "core.quotepath=off", "ls-files"], cancellationToken, 60).ConfigureAwait(false);
+        var found = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (!files.Ok)
+        {
+            return found;
+        }
+
+        foreach (var line in files.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var name = line[(line.LastIndexOf('/') + 1)..].TrimEnd('"');
+            var dot = name.LastIndexOf('.');
+            // 계약: 점으로 시작하는 이름(.gitignore)과 점으로 끝나는 이름은 확장자가 없는 것으로 센다
+            var extension = dot > 0 && dot < name.Length - 1 ? name[dot..].ToLowerInvariant() : string.Empty;
+            found[extension] = found.GetValueOrDefault(extension) + 1;
+        }
+
+        return found;
+    }
+
+    public async Task<CommitFacts> ReadCommitFactsAsync(RepoEntry repo, int days, CancellationToken cancellationToken)
+    {
+        // 계약: 시(%H)를 앞에 둔다 — 작성자 이름에 탭이 있어도 앞 칸이 밀리지 않는다
+        var log = await _runner.RunAsync(repo.Path,
+            ["log", $"--since={days}.days.ago", "--date=format:%H", "--format=%cd%x09%an"], cancellationToken, 60).ConfigureAwait(false);
+        if (!log.Ok)
+        {
+            return CommitFacts.Empty;
+        }
+
+        var authors = new Dictionary<string, int>(StringComparer.Ordinal);
+        var hours = new int[24];
+        foreach (var line in log.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var cut = line.IndexOf('\t');
+            if (cut <= 0 || !int.TryParse(line[..cut], out var hour) || hour is < 0 or > 23)
+            {
+                continue;
+            }
+
+            hours[hour]++;
+            var author = line[(cut + 1)..].Trim();
+            authors[author] = authors.GetValueOrDefault(author) + 1;
+        }
+
+        return new CommitFacts(authors, hours);
+    }
+
+    public async Task<IReadOnlyList<CommitInfo>> ReadBranchLogAsync(RepoEntry repo, string reference, int max, CancellationToken cancellationToken)
+    {
+        // 함정: 「--」 를 붙여야 같은 이름의 파일이 있어도 ref 로 읽는다
+        var log = await _runner.RunAsync(repo.Path,
+            ["log", reference, "-n", max.ToString(System.Globalization.CultureInfo.InvariantCulture), $"--format=%H{Unit}%cs{Unit}%an{Unit}%cI{Unit}%s", "--"],
+            cancellationToken, 60).ConfigureAwait(false);
+        if (!log.Ok)
+        {
+            return [];
+        }
+
+        var found = new List<CommitInfo>();
+        foreach (var line in log.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = line.TrimEnd('\r').Split(Unit, 5);
+            if (fields.Length == 5 && DateOnly.TryParseExact(fields[1], "yyyy-MM-dd", out var day))
+            {
+                found.Add(new CommitInfo(fields[0], day, fields[2], DateTimeOffset.TryParse(fields[3], out var when) ? when : null, fields[4]));
+            }
+        }
+
+        return found;
+    }
+
+    public async Task<IReadOnlySet<string>> ReadUnpushedAsync(RepoEntry repo, string reference, int max, CancellationToken cancellationToken)
+    {
+        var log = await _runner.RunAsync(repo.Path,
+            ["log", reference, "-n", max.ToString(System.Globalization.CultureInfo.InvariantCulture), "--format=%H", "--not", "--remotes", "--"],
+            cancellationToken, 60).ConfigureAwait(false);
+        return log.Ok
+            ? log.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
+    }
+
+    public async Task<(bool Ok, string Message)> SwitchBranchAsync(RepoEntry repo, BranchInfo branch, CancellationToken cancellationToken)
+    {
+        // 계약: 원격 브랜치 이름은 「<remote>/<브랜치>」 다 — 첫 빗금 뒤가 로컬 이름이다
+        var local = branch.IsRemote ? branch.Name[(branch.Name.IndexOf('/') + 1)..] : branch.Name;
+        var exists = await _runner.RunAsync(repo.Path,
+            ["show-ref", "--verify", "--quiet", $"refs/heads/{local}"], cancellationToken, 20).ConfigureAwait(false);
+
+        var result = await _runner.RunAsync(repo.Path,
+            exists.Ok ? ["switch", local] : ["switch", "--track", "-c", local, branch.Name], cancellationToken, 60).ConfigureAwait(false);
+        if (result.Ok)
+        {
+            return (true, $"{local} 로 옮겼습니다.");
+        }
+
+        return (false, result.Text.Contains("would be overwritten", StringComparison.OrdinalIgnoreCase)
+            ? $"변경한 파일이 {local} 와 겹쳐 옮기지 못했습니다 — 먼저 커밋해 주십시오."
+            : FirstLine(result.Text));
+    }
+
+    public async Task<long> ReadObjectSizeAsync(RepoEntry repo, CancellationToken cancellationToken)
+    {
+        var count = await _runner.RunAsync(repo.Path, ["count-objects", "-v"], cancellationToken, 30).ConfigureAwait(false);
+        if (!count.Ok)
+        {
+            return 0;
+        }
+
+        // 계약: size 는 풀린 객체, size-pack 은 묶인 객체다 — 둘 다 KiB 로 나온다
+        long total = 0;
+        foreach (var line in count.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if ((line.StartsWith("size:", StringComparison.Ordinal) || line.StartsWith("size-pack:", StringComparison.Ordinal))
+                && long.TryParse(line[(line.IndexOf(':') + 1)..].Trim(), out var kib))
+            {
+                total += kib;
+            }
+        }
+
+        return total;
+    }
+
     public async Task<IReadOnlyList<CommitInfo>> ReadCommitsAsync(RepoEntry repo, DateOnly from, DateOnly to, CancellationToken cancellationToken)
     {
         // 왜: --since·--until 은 시각까지 견줘 날 경계에서 어긋난다 — 이틀씩 넉넉히 받아 커밋한 날(%cs)로 다시 거른다
@@ -161,6 +288,68 @@ public sealed class GitService(IGitRunner runner) : IGitService
         }
 
         return found;
+    }
+
+    /// 계약: 비어 있으면 stash 가 없다 — refs/stash 가 없는 저장소는 git 이 실패로 돌려주므로 그것도 빈 목록이다
+    // 함정: %gs 는 「On main: 메시지」 꼴이다 — 머리말을 떼어야 브랜치와 메시지를 가를 수 있다
+    public async Task<IReadOnlyList<StashEntry>> ReadStashesAsync(RepoEntry repo, CancellationToken cancellationToken)
+    {
+        var list = await _runner.RunAsync(repo.Path,
+            ["stash", "list", $"--format=%gd{Unit}%H{Unit}%cI{Unit}%gs"], cancellationToken, 30).ConfigureAwait(false);
+
+        if (!list.Ok)
+        {
+            return [];
+        }
+
+        var found = new List<StashEntry>();
+        foreach (var line in list.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = line.TrimEnd('\r').Split(Unit, 4);
+            if (fields.Length < 4)
+            {
+                continue;
+            }
+
+            var (branch, message) = SplitStashSubject(fields[3]);
+            var files = await ReadStashFilesAsync(repo, fields[0], cancellationToken).ConfigureAwait(false);
+            found.Add(new StashEntry(
+                fields[0], fields[1],
+                DateTimeOffset.TryParse(fields[2], out var when) ? when : null,
+                branch, message, files));
+        }
+
+        return found;
+    }
+
+    /// 계약: 「On <브랜치>: <글>」·「WIP on <브랜치>: <글>」 둘만 가른다 — 그 밖의 모양은 통째로 글이 된다
+    internal static (string Branch, string Message) SplitStashSubject(string subject)
+    {
+        var text = subject.Trim();
+        foreach (var head in new[] { "WIP on ", "On " })
+        {
+            if (!text.StartsWith(head, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var rest = text[head.Length..];
+            var colon = rest.IndexOf(':', StringComparison.Ordinal);
+            return colon < 0 ? (rest, string.Empty) : (rest[..colon], rest[(colon + 1)..].Trim());
+        }
+
+        return (string.Empty, text);
+    }
+
+    // 왜: 「무엇이 들었나」가 없으면 stash 숫자만 보고는 지워도 되는지 판단할 수 없다 — 파일 이름까지 읽어 준다
+    private async Task<IReadOnlyList<string>> ReadStashFilesAsync(RepoEntry repo, string stashRef, CancellationToken ct)
+    {
+        var show = await _runner.RunAsync(repo.Path,
+            ["stash", "show", "--name-only", "--include-untracked", stashRef], ct, 30).ConfigureAwait(false);
+
+        return show.Ok
+            ? show.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : [];
     }
 
     public async Task<IReadOnlyList<FileChange>> ReadChangesAsync(RepoEntry repo, CancellationToken cancellationToken)
@@ -765,7 +954,17 @@ public sealed class GitService(IGitRunner runner) : IGitService
 
         var changed = result.Text.Length > 0;
         step.Outcome = changed ? StepOutcome.Success : StepOutcome.Skipped;
-        step.Message = changed ? "원격을 받았습니다." : "바뀐 것이 없습니다.";
+        // 계약: 「원격」이라고만 적지 않는다 — 무엇을 받았는지 원격 이름과 브랜치 이름으로 적는다
+        var remote = options.RemoteName;
+        var upload = await UploadBranchAsync(repo, options, ct).ConfigureAwait(false);
+        var current = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
+        var names = string.Join(" · ", new[]
+        {
+            upload is null ? null : $"업로드 브랜치 {remote}/{upload}",
+            current.Length == 0 || current == upload ? null : $"작업 브랜치 {remote}/{current}"
+        }.Where(n => n is not null));
+        var scope = names.Length == 0 ? $"{remote} 의 브랜치 전체" : $"{remote} 의 브랜치 전체({names} 포함)";
+        step.Message = changed ? $"{scope}를 받았습니다." : $"{scope}에 새로 받을 것이 없습니다.";
         step.Detail = result.Text;
     }
 
@@ -777,8 +976,41 @@ public sealed class GitService(IGitRunner runner) : IGitService
     }
 
     /// 계약: 지금 브랜치가 작업 브랜치가 아니면 건너뛴다(true) — 병합·커밋·올리기가 엉뚱한 브랜치에 들어가지 않게 한다
-    // 왜: 작업 브랜치가 그 저장소에 아예 없으면 막지 않는다 — 공통 값을 안 쓰는 저장소는 지금 브랜치로 일하는 것이다
+    // 왜: 작업 브랜치가 그 저장소에(로컬에도 원격에도) 아예 없으면 막지 않는다 — 공통 값을 안 쓰는 저장소는 지금 브랜치로 일하는 것이다
     private async Task<bool> NotOnWorkBranchAsync(RepoEntry repo, BulkOperationOptions options, string current, BulkStepResult step, CancellationToken ct)
+    {
+        // 계약: 사용자가 「이 브랜치 그대로」라고 확인한 저장소는 막지 않는다 — 확인한 뒤 브랜치가 바뀌었으면 다시 막는다
+        if (options.ConfirmedBranches.TryGetValue(repo.Id, out var confirmed) && string.Equals(confirmed, current, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var work = options.WorkBranchFor(repo);
+        if (!await IsOffWorkBranchAsync(repo, options, current, ct).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        step.Outcome = StepOutcome.Skipped;
+        step.Message = $"지금 브랜치가 {current} 입니다 — 작업 브랜치({work})가 아니라 건너뛰었습니다.";
+        step.NextAction = BulkNextAction.Switch;
+        return true;
+    }
+
+    public async Task<(string Current, string Work)?> ReadOffWorkBranchAsync(RepoEntry repo, BulkOperationOptions options, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(repo.Path))
+        {
+            return null;
+        }
+
+        var current = await CurrentBranchAsync(repo, cancellationToken).ConfigureAwait(false);
+        return current.Length > 0 && await IsOffWorkBranchAsync(repo, options, current, cancellationToken).ConfigureAwait(false)
+            ? (current, options.WorkBranchFor(repo))
+            : null;
+    }
+
+    private async Task<bool> IsOffWorkBranchAsync(RepoEntry repo, BulkOperationOptions options, string current, CancellationToken ct)
     {
         var work = options.WorkBranchFor(repo);
         if (work.Length == 0 || string.Equals(work, current, StringComparison.Ordinal))
@@ -790,12 +1022,15 @@ public sealed class GitService(IGitRunner runner) : IGitService
             ["show-ref", "--verify", "--quiet", $"refs/heads/{work}"], ct, 20).ConfigureAwait(false);
         if (!exists.Ok)
         {
-            return false;
+            // 함정: 원격에만 있는 작업 브랜치도 「있는 것」이다 — 안 보면 main 에 커밋하고 그대로 올린다(「전환」이 추적 브랜치를 만든다)
+            var remote = await _runner.RunAsync(repo.Path,
+                ["show-ref", "--verify", "--quiet", $"refs/remotes/{options.RemoteName}/{work}"], ct, 20).ConfigureAwait(false);
+            if (!remote.Ok)
+            {
+                return false;
+            }
         }
 
-        step.Outcome = StepOutcome.Skipped;
-        step.Message = $"지금 브랜치가 {current} 입니다 — 작업 브랜치({work})가 아니라 건너뛰었습니다.";
-        step.NextAction = BulkNextAction.Switch;
         return true;
     }
 
@@ -826,7 +1061,9 @@ public sealed class GitService(IGitRunner runner) : IGitService
         {
             var changed = result.Text.Length > 0;
             step.Outcome = changed ? StepOutcome.Success : StepOutcome.Skipped;
-            step.Message = changed ? $"{defaultBranch} 를 갱신했습니다." : $"{defaultBranch} 는 이미 최신입니다.";
+            step.Message = changed
+                ? $"업로드 브랜치 {options.RemoteName}/{defaultBranch} 를 받아 로컬 {defaultBranch} 를 갱신했습니다."
+                : $"업로드 브랜치 {defaultBranch} 는 이미 {options.RemoteName}/{defaultBranch} 와 같습니다.";
             step.Detail = result.Text;
             return;
         }
@@ -835,7 +1072,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
         step.Message = result.Text.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
             ? $"{defaultBranch} 가 갈라져 빨리감기로 갱신할 수 없습니다."
             : result.Text.Contains("couldn't find remote ref", StringComparison.OrdinalIgnoreCase)
-                ? $"원격에 {defaultBranch} 브랜치가 없습니다 — 이 저장소의 업로드 브랜치를 따로 고르거나 비우면 기본 브랜치를 씁니다."
+                ? $"{options.RemoteName} 에 {defaultBranch} 브랜치가 없습니다 — 이 저장소의 업로드 브랜치를 따로 고르거나 비우면 기본 브랜치를 씁니다."
                 : FirstLine(result.Text);
         step.Detail = result.Text;
     }
@@ -844,15 +1081,16 @@ public sealed class GitService(IGitRunner runner) : IGitService
     {
         // 계약: 병합해 올 브랜치를 골랐으면 그것을, 안 골랐으면 이 저장소의 업로드 브랜치를 가져온다
         var picked = options.MergeSource.Trim();
-        var defaultBranch = picked.Length > 0 ? picked : await UploadBranchAsync(repo, options, ct).ConfigureAwait(false);
+        var current = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
+        var defaultBranch = options.MergeOwnRemote ? (current.Length > 0 ? current : null)
+            : picked.Length > 0 ? picked : await UploadBranchAsync(repo, options, ct).ConfigureAwait(false);
         if (defaultBranch is null)
         {
             step.Outcome = StepOutcome.Skipped;
-            step.Message = "기본 브랜치를 찾지 못했습니다.";
+            step.Message = options.MergeOwnRemote ? "브랜치가 분리돼 있어 병합하지 않았습니다." : "기본 브랜치를 찾지 못했습니다.";
             return;
         }
 
-        var current = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
         // 계약: 지금 브랜치가 가져올 브랜치와 같으면 원격의 같은 브랜치를 합친다 — 올리기가 거부된(갈라진) 저장소를 이 단추로 푼다
         var sameBranch = current == defaultBranch;
 
@@ -883,7 +1121,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
         {
             step.Outcome = StepOutcome.Skipped;
             step.Message = sameBranch
-                ? $"지금이 {defaultBranch} 이고 원격에 같은 브랜치가 없습니다."
+                ? $"지금이 {defaultBranch} 이고 {options.RemoteName}/{defaultBranch} 가 없습니다."
                 : $"{defaultBranch} 브랜치가 이 저장소에 없어 병합하지 않았습니다.";
             return;
         }
@@ -895,7 +1133,8 @@ public sealed class GitService(IGitRunner runner) : IGitService
         {
             var already = result.StdOut.Contains("Already up to date", StringComparison.OrdinalIgnoreCase);
             step.Outcome = already ? StepOutcome.Skipped : StepOutcome.Success;
-            step.Message = already ? $"{reference} 와 이미 같습니다." : $"{reference} 를 {current} 로 병합했습니다.";
+            var label = picked.Length == 0 && !options.MergeOwnRemote ? "업로드 브랜치 " : string.Empty;
+            step.Message = already ? $"{label}{reference} 와 이미 같습니다." : $"{label}{reference} 를 {current} 로 병합했습니다.";
             step.Detail = result.Text;
             return;
         }
@@ -929,6 +1168,25 @@ public sealed class GitService(IGitRunner runner) : IGitService
             args.Add("--no-edit");
         }
 
+        // 왜: 갓 만든 작업 브랜치는 upstream 이 없다 — 일괄 받기에서 그 저장소마다 「실패」로 세지 않는다
+        var upstream = await _runner.RunAsync(repo.Path,
+            ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], ct, 20).ConfigureAwait(false);
+        var current = upstream.Ok ? string.Empty : await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
+        if (!string.IsNullOrEmpty(current))
+        {
+            var known = await _runner.RunAsync(repo.Path,
+                ["show-ref", "--verify", "--quiet", $"refs/remotes/{options.RemoteName}/{current}"], ct, 20).ConfigureAwait(false);
+            if (!known.Ok)
+            {
+                step.Outcome = StepOutcome.Skipped;
+                step.Message = $"{options.RemoteName} 에 {current} 브랜치가 아직 없어 받을 것이 없습니다 — 올리면 생깁니다.";
+                return;
+            }
+
+            // 계약: upstream 은 없지만 원격에 같은 이름이 있으면 그 브랜치를 받는다 — upstream 설정은 바꾸지 않는다
+            args.AddRange([options.RemoteName, current]);
+        }
+
         var stashed = false;
         if (options.AutoStash && await IsDirtyAsync(repo, ct).ConfigureAwait(false))
         {
@@ -952,7 +1210,8 @@ public sealed class GitService(IGitRunner runner) : IGitService
         {
             var already = result.Text.Contains("Already up to date", StringComparison.OrdinalIgnoreCase);
             step.Outcome = already ? StepOutcome.Skipped : StepOutcome.Success;
-            step.Message = already ? "이미 최신입니다." : "받았습니다.";
+            var source = upstream.Ok ? upstream.StdOut.Trim() : $"{options.RemoteName}/{current}";
+            step.Message = already ? $"{source} 와 이미 같습니다." : $"{source} 를 받았습니다.";
             step.Detail = string.IsNullOrEmpty(step.Detail) ? result.Text : step.Detail;
             return;
         }
@@ -969,7 +1228,7 @@ public sealed class GitService(IGitRunner runner) : IGitService
         {
             step.Outcome = StepOutcome.Failed;
             step.Message = result.Text.Contains("no tracking information", StringComparison.OrdinalIgnoreCase)
-                ? "추적 중인 원격 브랜치가 없습니다."
+                ? $"{options.RemoteName} 에 이 브랜치를 올린 적이 없어 받을 곳이 없습니다."
                 : FirstLine(result.Text);
         }
 
@@ -1068,6 +1327,17 @@ public sealed class GitService(IGitRunner runner) : IGitService
             return;
         }
 
+        // 함정: add -A 는 충돌 표식(<<<<<<<)이 든 파일도 「풀렸다」고 스테이지한다 — 풀지 않은 충돌이 있으면 커밋하지 않는다(2026-10-11 실측: 표식째 main 에 올라갔다)
+        var unresolved = await ReadConflictsAsync(repo, ct).ConfigureAwait(false);
+        if (unresolved.Count > 0)
+        {
+            step.Outcome = StepOutcome.Conflict;
+            step.Message = $"충돌 {unresolved.Count}건이 남아 있어 커밋하지 않았습니다 — 「충돌」 탭에서 풀어 주십시오.";
+            step.NextAction = BulkNextAction.Conflict;
+            step.ConflictPaths.AddRange(unresolved.Select(c => c.Path));
+            return;
+        }
+
         var current = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
         if (await NotOnWorkBranchAsync(repo, options, current, step, ct).ConfigureAwait(false))
         {
@@ -1113,6 +1383,9 @@ public sealed class GitService(IGitRunner runner) : IGitService
         step.Detail = commit.Text;
     }
 
+    /// 계약: 올리기는 두 벌이다 — ① 지금(작업) 브랜치를 제 원격 브랜치로 ② 업로드 브랜치가 다르면 거기에도.
+    /// 왜: ②만 하면 작업 브랜치가 원격에 영영 안 올라가 줄의 「올릴 것 ↑N」이 사라지지 않는다.
+    /// 계약: force 는 어디에도 쓰지 않는다 — 거부되면 「먼저 받아서 합쳐 주십시오」로 끝낸다.
     private async Task PushAsync(RepoEntry repo, BulkOperationOptions options, BulkStepResult step, CancellationToken ct)
     {
         var branch = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
@@ -1128,64 +1401,86 @@ public sealed class GitService(IGitRunner runner) : IGitService
             return;
         }
 
+        var parts = new List<PushPart> { await PushCurrentAsync(repo, options, branch, ct).ConfigureAwait(false) };
+
+        var upload = options.UploadBranchFor(repo);
+        if (upload.Length > 0 && !string.Equals(upload, branch, StringComparison.Ordinal))
+        {
+            parts.Add(await PushUploadAsync(repo, options, branch, upload, ct).ConfigureAwait(false));
+        }
+
+        // 계약: 한쪽이 실패하면 전체가 실패다 — 하나라도 올라갔으면 성공, 둘 다 할 일이 없었으면 건너뜀이다
+        step.Outcome = parts.Any(p => p.Outcome == StepOutcome.Failed) ? StepOutcome.Failed
+            : parts.Any(p => p.Outcome == StepOutcome.Success) ? StepOutcome.Success
+            : StepOutcome.Skipped;
+        step.Message = string.Join(" · ", parts.Select(p => p.Message));
+        step.Detail = string.Join(Environment.NewLine, parts.Select(p => p.Detail).Where(d => d.Length > 0));
+        step.NextAction = parts.Select(p => p.NextAction).FirstOrDefault(a => a.Length > 0) ?? string.Empty;
+    }
+
+    /// <summary>올리기 한 벌의 결과 — 작업 브랜치와 업로드 브랜치가 각각 하나씩 낸다.</summary>
+    private readonly record struct PushPart(StepOutcome Outcome, string Message, string Detail, string NextAction);
+
+    // 계약: upstream 이 있으면 그 브랜치로, 없으면 설정에 따라 -u 로 만든다 — 업로드 브랜치와 무관하게 늘 돈다
+    private async Task<PushPart> PushCurrentAsync(RepoEntry repo, BulkOperationOptions options, string branch, CancellationToken ct)
+    {
         var upstream = await _runner.RunAsync(repo.Path,
             ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], ct, 20).ConfigureAwait(false);
 
-        // 계약: 올리는 브랜치가 지금 브랜치와 다르면 그 원격 브랜치로 올린다 — upstream 은 바꾸지 않고, 빨리감기가 안 되면 git 이 거부한다
-        var target = options.UploadBranchFor(repo);
-        var elsewhere = target.Length > 0 && !string.Equals(target, branch, StringComparison.Ordinal);
+        List<string> args = upstream.Ok
+            ? ["push", options.RemoteName, $"HEAD:{branch}"]
+            : options.SetUpstreamOnPush
+                ? ["push", "-u", options.RemoteName, branch]
+                : ["push", options.RemoteName, branch];
 
-        if (elsewhere)
+        return await RunPushAsync(repo, options, args, branch, $"{branch} 를 올렸습니다.", ct).ConfigureAwait(false);
+    }
+
+    // 왜: 원격에 없는 이름으로 올리면 새 원격 브랜치가 조용히 생긴다 — master 저장소에 origin/main 이 만들어졌다
+    // 계약: 판정은 로컬이 아는 ref 로 한다 — 원격에 있어도 Fetch 전이면 건너뛴다
+    private async Task<PushPart> PushUploadAsync(RepoEntry repo, BulkOperationOptions options, string branch, string upload, CancellationToken ct)
+    {
+        var known = await _runner.RunAsync(repo.Path,
+            ["show-ref", "--verify", "--quiet", $"refs/remotes/{options.RemoteName}/{upload}"], ct, 20).ConfigureAwait(false);
+        if (!known.Ok)
         {
-            // 왜: 원격에 없는 이름으로 올리면 새 원격 브랜치가 조용히 생긴다 — master 저장소에 origin/main 이 만들어졌다
-            var known = await _runner.RunAsync(repo.Path,
-                ["show-ref", "--verify", "--quiet", $"refs/remotes/{options.RemoteName}/{target}"], ct, 20).ConfigureAwait(false);
-            if (!known.Ok)
-            {
-                step.Outcome = StepOutcome.Skipped;
-                step.Message = $"{options.RemoteName} 에 {target} 브랜치가 없어 올리지 않았습니다 — 이 저장소의 업로드 브랜치를 따로 고르거나 Fetch 뒤 다시 해 주십시오.";
-                return;
-            }
+            return new PushPart(StepOutcome.Skipped,
+                $"{options.RemoteName} 에 {upload} 브랜치가 없어 올리지 않았습니다 — 이 저장소의 업로드 브랜치를 따로 고르거나 Fetch 뒤 다시 해 주십시오.",
+                string.Empty, string.Empty);
         }
 
-        var args = elsewhere
-            ? new List<string> { "push", options.RemoteName, $"HEAD:refs/heads/{target}" }
-            : upstream.Ok
-                ? ["push", options.RemoteName, $"HEAD:{branch}"]
-                : options.SetUpstreamOnPush
-                    ? ["push", "-u", options.RemoteName, branch]
-                    : ["push", options.RemoteName, branch];
+        List<string> args = ["push", options.RemoteName, $"HEAD:refs/heads/{upload}"];
+        return await RunPushAsync(repo, options, args, upload,
+            $"{branch} 를 {options.RemoteName}/{upload} 로 올렸습니다.", ct).ConfigureAwait(false);
+    }
 
+    private async Task<PushPart> RunPushAsync(
+        RepoEntry repo, BulkOperationOptions options, IReadOnlyList<string> args, string target, string doneMessage, CancellationToken ct)
+    {
         var result = await _runner.RunAsync(repo.Path, args, ct, options.TimeoutSeconds).ConfigureAwait(false);
 
         if (result.Ok)
         {
             var already = result.Text.Contains("Everything up-to-date", StringComparison.OrdinalIgnoreCase);
-            step.Outcome = already ? StepOutcome.Skipped : StepOutcome.Success;
-            step.Message = already
-                ? "올릴 것이 없습니다."
-                : elsewhere ? $"{branch} 를 {options.RemoteName}/{target} 로 올렸습니다." : $"{branch} 를 올렸습니다.";
-            step.Detail = result.Text;
-            return;
+            return new PushPart(
+                already ? StepOutcome.Skipped : StepOutcome.Success,
+                already ? $"{target} 에 올릴 것이 없습니다." : doneMessage,
+                result.Text, string.Empty);
         }
 
         // 왜: 원격이 없는 로컬 전용 저장소는 실패가 아니다 — 일괄 올리기의 「실패 1」로 세지 않는다
         if (result.Text.Contains("does not appear to be a git repository", StringComparison.OrdinalIgnoreCase))
         {
-            step.Outcome = StepOutcome.Skipped;
-            step.Message = $"원격({options.RemoteName})이 없어 올리지 않았습니다.";
-            step.Detail = result.Text;
-            return;
+            return new PushPart(StepOutcome.Skipped, $"{options.RemoteName} 저장소가 연결돼 있지 않아 올리지 않았습니다.", result.Text, string.Empty);
         }
 
-        step.Outcome = StepOutcome.Failed;
         // 계약: 거부당하면 force 를 권하지 않는다 — 먼저 받아서 합치라고 적는다
         var rejected = result.Text.Contains("rejected", StringComparison.OrdinalIgnoreCase);
-        step.Message = rejected
-            ? "거부됐습니다 — 원격이 앞서 있습니다. 먼저 받아서 합쳐 주십시오."
-            : FirstLine(result.Text);
-        step.NextAction = rejected ? BulkNextAction.Merge : string.Empty;
-        step.Detail = result.Text;
+        return new PushPart(
+            StepOutcome.Failed,
+            rejected ? $"{options.RemoteName}/{target} 이 앞서 있어 {target} 올리기가 거부됐습니다 — 먼저 받아서 합쳐 주십시오." : FirstLine(result.Text),
+            result.Text,
+            rejected ? BulkNextAction.Merge : string.Empty);
     }
 
     /// 계약: 있는 브랜치로만 옮긴다 — 로컬에 없으면 원격의 같은 이름을 추적하는 브랜치를 만들고, 둘 다 없으면 건너뛴다

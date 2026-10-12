@@ -22,9 +22,33 @@ public sealed partial class ConflictHunkVm : ObservableObject
         CanMerge = suggestion.Choice == ConflictChoice.Merged;
         MergedLines = CanMerge ? ConflictResolver.TryMergeLines(hunk.Base, hunk.Ours, hunk.Theirs) ?? [] : [];
         _choice = suggestion.Choice;
+        HasBase = hasBase && hunk.Base.Count > 0;
+
+        // 계약: 같은 줄은 자리와 무관하게 내용으로만 센다 — 훑어보는 요약이지 병합 판정이 아니다
+        var theirs = hunk.Theirs.GroupBy(l => l, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+        var same = 0;
+        foreach (var line in hunk.Ours)
+        {
+            if (theirs.TryGetValue(line, out var left) && left > 0)
+            {
+                theirs[line] = left - 1;
+                same++;
+            }
+        }
+
+        DiffSummary = Loc.T("내 것 {0}줄 · 상대 것 {1}줄 · 같은 줄 {2} · 내 것에만 {3} · 상대 것에만 {4}",
+            hunk.Ours.Count, hunk.Theirs.Count, same, hunk.Ours.Count - same, hunk.Theirs.Count - same);
     }
 
     public ConflictHunk Hunk { get; }
+
+    /// 계약: 양쪽이 갈라지기 전의 내용(공통 조상) — 조상이 있을 때만 보인다
+    public IReadOnlyList<string> Base => Hunk.Base;
+
+    public bool HasBase { get; }
+
+    /// 계약: 이 구간에서 양쪽이 얼마나 다른지 한 줄로 적은 것
+    public string DiffSummary { get; }
 
     public int StartLine => Hunk.StartLine;
 
@@ -96,6 +120,12 @@ public sealed class ConflictFileVm : ObservableObject
 
     public bool IsReady => CanResolve && Hunks.All(h => h.Choice != ConflictChoice.None);
 
+    /// 계약: 이 파일의 차이를 한 줄로 적은 것 — 구간 수와 양쪽 줄 수, 사람이 골라야 할 구간 수
+    public string DiffSummary => Hunks.Count == 0
+        ? string.Empty
+        : Loc.T("구간 {0} · 내 것 {1}줄 · 상대 것 {2}줄 · 직접 고를 구간 {3}",
+            Hunks.Count, Hunks.Sum(h => h.Ours.Count), Hunks.Sum(h => h.Theirs.Count), Hunks.Count(h => !h.IsCertain));
+
     public string Summary => !CanResolve
         ? "앱에서 풀 수 없음"
         : $"{Hunks.Count(h => h.Choice != ConflictChoice.None)} / {Hunks.Count} 구간 선택 · 자동 {Hunks.Count(h => h.IsCertain)}";
@@ -105,6 +135,13 @@ public sealed partial class MainViewModel
 {
     /// 계약: 병합 중인데 풀 충돌이 더 없다 — 「병합 마무리」 단추가 이때만 보인다
     public bool CanConcludeMerge => SelectedRow?.Status?.Operation == GitOperationState.Merging && Conflicts.Count == 0;
+
+    /// 계약: 충돌 탭 맨 위의 차이 요약 — 저장소 전체에서 무엇이 얼마나 갈렸는지 한 줄이다
+    public string ConflictOverview => Conflicts.Count == 0
+        ? string.Empty
+        : Loc.T("충돌 파일 {0}개 · 구간 {1}개 · 자동 판정 {2}개 · 직접 고를 구간 {3}개 · 앱에서 못 푸는 파일 {4}개",
+            Conflicts.Count, Conflicts.Sum(f => f.Hunks.Count), Conflicts.Sum(f => f.Hunks.Count(h => h.IsCertain)),
+            Conflicts.Sum(f => f.Hunks.Count(h => !h.IsCertain)), Conflicts.Count(f => !f.CanResolve));
 
     [RelayCommand]
     private async Task ApplyConflictFileAsync(ConflictFileVm? file)
@@ -184,6 +221,7 @@ public sealed partial class MainViewModel
             await LoadDetailAsync(row).ConfigureAwait(true);
         }
 
+        OnPropertyChanged(nameof(ConflictOverview));
         OnPropertyChanged(nameof(CanConcludeMerge));
     }
 }

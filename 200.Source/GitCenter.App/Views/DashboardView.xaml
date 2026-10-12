@@ -32,7 +32,12 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{Binding Title}" Style="{StaticResource SectionTitle}" Margin="0"
-                               VerticalAlignment="Center" />
+                               VerticalAlignment="Center"
+                               Visibility="{Binding DataContext.IsDashboardEditing, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}" />
+                    <ComboBox ItemsSource="{Binding Choices}" DisplayMemberPath="Title" SelectedItem="{Binding Pick, Mode=TwoWay}"
+                              MinWidth="150" MaxDropDownHeight="360" VerticalAlignment="Center"
+                              ToolTip="{loc:Tr '이 칸에 올릴 통계를 고릅니다 — 이미 다른 칸에 있으면 두 칸이 자리를 바꿉니다'}"
+                              Visibility="{Binding DataContext.IsDashboardEditing, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Grid.Column="1" Text="{Binding Caption}" Style="{StaticResource Micro}" Margin="10,0,0,0"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     <ListBox Grid.Column="2" Margin="8,0,0,0"
@@ -96,7 +101,7 @@
                 <Border Style="{StaticResource Chip}" Margin="12,0,0,0" Padding="9,2" VerticalAlignment="Center"
                         Background="{DynamicResource AccentSoftBrush}"
                         Visibility="{Binding IsDashboardEditing, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock Text="{loc:Tr 'UI 편집 중 · 카드 사이 손잡이로 크기 조절'}" Style="{StaticResource ChipText}"
+                    <TextBlock Text="{loc:Tr 'UI 편집 중 · 카드 사이 손잡이로 크기 조절 · 카드 제목에서 통계 고르기'}" Style="{StaticResource ChipText}"
                                Foreground="{DynamicResource TextPrimaryBrush}" />
                 </Border>
             </StackPanel>
@@ -194,7 +199,7 @@
             <GridSplitter Grid.Row="3" Style="{StaticResource LayoutSplitter}" ResizeDirection="Rows" Cursor="SizeNS"
                           IsEnabled="{Binding IsDashboardEditing}" />
 
-            <!-- 첫 줄 — 그룹별 현황 · 대표 상태 분포 · 변경 파일 구성 · 브랜치 분포 -->
+            <!-- 첫 줄 — 그룹별 현황 + 통계 칸 셋(Slots[0..2] · 처음 배치: 대표 상태 분포 · 변경 파일 구성 · 소스 확장자 구성) -->
             <Grid x:Name="TopRow" Grid.Row="0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" MinWidth="220" />
@@ -333,9 +338,9 @@
                     </Grid>
                 </Border>
 
-                <ContentControl Grid.Column="2" Style="{StaticResource ChartCard}" Content="{Binding StateChart}" />
-                <ContentControl Grid.Column="4" Style="{StaticResource ChartCard}" Content="{Binding ChangeChart}" />
-                <ContentControl Grid.Column="6" Style="{StaticResource ChartCard}" Content="{Binding BranchChart}" />
+                <ContentControl Grid.Column="2" Style="{StaticResource ChartCard}" Content="{Binding Slots[0]}" />
+                <ContentControl Grid.Column="4" Style="{StaticResource ChartCard}" Content="{Binding Slots[1]}" />
+                <ContentControl Grid.Column="6" Style="{StaticResource ChartCard}" Content="{Binding Slots[2]}" />
             </Grid>
 
             <!-- 가운데 줄 — 커밋 캘린더 · 변경 많은 저장소 · 변경 줄 수 · 마지막 커밋 시점 -->
@@ -356,10 +361,10 @@
                 <GridSplitter Grid.Column="3" Style="{StaticResource LayoutSplitter}" ResizeDirection="Columns" Cursor="SizeWE"
                               IsEnabled="{Binding IsDashboardEditing}" />
 
-                <ContentControl Grid.Column="0" Style="{StaticResource ChartCard}" Content="{Binding CalendarChart}" />
-                <ContentControl Grid.Column="2" Style="{StaticResource ChartCard}" Content="{Binding TopChart}" />
-                <ContentControl Grid.Column="4" Style="{StaticResource ChartCard}" Content="{Binding LinesChart}" />
-                <ContentControl Grid.Column="6" Style="{StaticResource ChartCard}" Content="{Binding AgeChart}" />
+                <ContentControl Grid.Column="0" Style="{StaticResource ChartCard}" Content="{Binding Slots[3]}" />
+                <ContentControl Grid.Column="2" Style="{StaticResource ChartCard}" Content="{Binding Slots[4]}" />
+                <ContentControl Grid.Column="4" Style="{StaticResource ChartCard}" Content="{Binding Slots[5]}" />
+                <ContentControl Grid.Column="6" Style="{StaticResource ChartCard}" Content="{Binding Slots[6]}" />
             </Grid>
 
             <!-- 아래 줄 — 확인 필요 · 최근 커밋 · 최근 작업 -->

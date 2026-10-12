@@ -94,11 +94,17 @@ public partial class MainWindow
 
     private async void OpenRowPopup(RepoRow row)
     {
-        // 계약: 쪽지는 창의 다른 곳을 누르거나 창이 뒤로 가면 닫힌다 — 쪽지 안(다른 창)을 누르는 것은 여기에 안 잡힌다
+        // 계약: 쪽지는 창의 다른 곳을 누르거나 창이 뒤로 가면 닫힌다
         if (!_rowPopupHooked)
         {
             _rowPopupHooked = true;
-            PreviewMouseDown += (_, _) => RowPopup.IsOpen = false;
+            PreviewMouseDown += (_, e) =>
+            {
+                if (!FromAnotherHwnd(e.OriginalSource))
+                {
+                    RowPopup.IsOpen = false;
+                }
+            };
             Deactivated += (_, _) => RowPopup.IsOpen = false;
         }
 
@@ -106,6 +112,32 @@ public partial class MainWindow
         await ViewModel.BeginEditAsync(row);
         RowPopup.IsOpen = true;
     }
+
+    /// 계약: 쪽지·고르는 상자 안에서 난 입력인가 — 그러면 쪽지를 닫지 않는다.
+    // 함정: Popup 은 제 창(HWND)에 그려지지만 라우트 이벤트는 논리 부모를 타고 본 창까지 올라온다 —
+    //       창의 PreviewMouseDown 은 터널링이라 안쪽 ComboBox 보다 먼저 터져 쪽지를 닫아 버린다.
+    // 계약: 브랜치 줄을 두 번 누르면 묻고 옮긴다 — 지금 브랜치는 묻지 않는다
+    private async void OnBranchDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (ViewModel.SelectedBranch is not { IsCurrent: false } branch || ViewModel.SelectedRow is not { } row)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(this,
+            Loc.T("{0} 저장소를 {1} 브랜치로 Switch 할까요?", row.Name, branch.Name) + Environment.NewLine
+            + Loc.T("변경한 파일이 그 브랜치와 겹치면 옮기지 않습니다."),
+            "JHJ Git Center", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+        if (answer == MessageBoxResult.Yes)
+        {
+            await ViewModel.SwitchToBranchAsync(branch);
+        }
+    }
+
+    private bool FromAnotherHwnd(object? source) =>
+        source is DependencyObject at &&
+        PresentationSource.FromDependencyObject(at) is { } from &&
+        !ReferenceEquals(from, PresentationSource.FromVisual(this));
 
     private static RepoRow? RowAt(DependencyObject? source) => Ancestor<ListBoxItem>(source)?.DataContext as RepoRow;
 

@@ -58,12 +58,20 @@
 - 계약: **Windows 제목 표시줄을 쓰지 않는다** — `WindowChrome`(CaptionHeight 0)으로 떼고 창 제어줄이 끌기·최대화·시스템 메뉴를 맡는다.
   `WindowStyle="None"` 으로 바꾸지 않는다 — 스냅·가장자리 크기 조절·그림자를 잃는다.
   계약: 보통 창은 **지금 올라 있는 모니터의 작업 영역을 넘지 않는다** — Core `WindowFit.KeepInsideWorkArea` 가 크기·자리 변화마다 조인다(2026-10-11 사용자 지시 · 외부 `MoveWindow` 뒤 창이 1527px 로 튀어 아래 띠가 작업 표시줄 뒤로 숨던 것).
-  계약: 창의 최소 폭은 일괄 작업 띠 **윗줄이 한 줄로 들어가는 폭**이다(`MainWindow.OnActionTopRowSizeChanged` → `ApplyDisplaySettings`) — 띠가 3·4줄로 흐르지 않는다. 한국어 1625 · 영어 1739(배율 1).
-  함정: 아래 진행 줄(`BusyText` · 진행막대)은 `IsBusy` 일 때만 보인다 — 평소에 빈 줄이 여백을 먹었다.
+  계약: 일괄 작업 띠는 **묶음 넷**이다 — 1 브랜치 · 2 Fetch · Pull · 3 Merge · 4 Commit · Push. 묶음마다 머리 한 줄 + 두 줄이고, 띠의 용어만 git 용어다.
+  계약: 창의 최소 폭은 띠가 **한 줄로 들어가는 폭**이다(`MainWindow.OnActionTopRowSizeChanged` → `ApplyDisplaySettings`) — 앞 묶음 셋의 폭 + 넷째 묶음의 최소 폭 430 + 여백 50. 띠가 3·4줄로 흐르지 않는다.
+  TODO: 한국어 1625 · 영어 1739(배율 1)는 띠를 넷으로 다시 짜기 전의 실측이다 — 다시 잰다.
+  계약: 창 맨 아래 상태 줄(`StatusBar`)은 **늘 보인다** — 왼쪽은 하는 일(`StatusBarText` · 없으면 「준비」)과 진행막대, 가운데는 가장 최근 작업 기록 한 줄(`LastActivityLine` ← `PushActivity`), 오른쪽은 갱신 줄(`RefreshLine`)이다.
+  함정: 「상태 새로 고침」은 `IsBusy` 를 켜지 않는다 — 상태 줄의 「일하는 중」은 `BusyText` 로 판정한다(`IsBusy` 에 묶었더니 새로 고침 때 진행 표시가 사라졌다).
+  계약: 복원 크기의 기본은 화면 비율 그대로 작업 영역 넓이의 60% 쯤이다(`MainWindow.RestoreRatio` 0.775 = √0.6) — 화면을 꽉 채운 저장값은 고른 적 없는 값으로 보고 기본 크기·가운데 자리를 쓴다.
+  함정: 기본 `Button` 의 `MinHeight` 32 는 `Height` 를 이긴다 — 줄 안의 작은 아이콘 단추는 `MinHeight="0"` 을 함께 준다(저장소 줄 톱니가 이름 줄을 32px 로 벌렸다).
   ⚠️ 창 단추 옆에 앱 단추를 두지 않는다 — 성격이 다른 둘이 한 줄에 섞이면 어색하다(2026-10-10 사용자 지적).
 - ★ 함정: `TabControl` 템플릿의 내용 자리는 반드시 **`x:Name="PART_SelectedContentHost"`** 다 —
   없으면 고른 탭의 내용이 **접근성 트리에 통째로 안 올라간다**(화면 낭독기도 UI 자동화도 못 읽는다. 2026-10-10 실측).
-- 계약: 오른쪽 단은 **「변경 내용」·「작업 로그」 두 탭**이다. 가운데에서 변경 파일을 고르면 `SelectedChange` 가 바뀌고 0번 탭으로 옮긴다.
+- 계약: 오른쪽 단은 **「변경 내용」·「작업 로그」·「시스템 작업 로그」 세 탭**이다. 가운데에서 변경 파일을 고르면 `SelectedChange` 가 바뀌고 0번 탭으로 옮긴다.
+  계약: 가운데 상세 단은 탭 다섯이다 — 「변경 파일」·「브랜치」·「충돌」·「상태」·「작업」.
+  계약: 「브랜치」 탭은 왼쪽 브랜치 목록 + 오른쪽 이력(최근 200건 · `MainViewModel.BranchLog.cs`)이다 — 원격에 없는 커밋에 「Push 전」을 달고, 판정은 로컬이 아는 원격 추적 ref 뿐이다.
+  계약: 브랜치를 두 번 누르면 화면이 먼저 묻고 Switch 한다(`MainWindow.Repos.cs` → `SwitchBranchAsync`) — 강제 옵션이 없어 겹치는 변경이 있으면 git 이 거부한다.
   계약: 이 단은 **접힌 채(손잡이만)로 시작한다** — `MainViewModel.IsRightPanelOpen` 이 펴고, 변경 파일을 누르면 저절로 펴진다.
   설정 「작업 로그 단」을 끄면 손잡이까지 숨는다(`MainWindow.ApplyDisplaySettings`).
 - 계약: 화면은 **제목 띠의 탭 넷**이다 — 0 「대시보드」 · 1 「저장소 관리」 · 2 「커밋 내역」 · 3 「점검」(`MainViewModel.PageIndex`). `Settings.StartPage` 에는 0·1 만 남긴다.
@@ -86,12 +94,28 @@
 - 계약: 일괄 커밋 글상자는 「커밋 제목」·「메시지」 둘이고 자리표 `{기능}`·`{그룹}`·`{저장소}` 는 **누를 때** 채운다(`MainViewModel.FillCommitText`). 본문은 `commit -m` 을 두 번 준다.
 - ★ 계약: 브랜치 설정은 둘이다 — 「작업 브랜치」(`Settings.WorkBranch`, 내가 일하는 곳)와 「업로드 브랜치」(`Settings.UploadBranch`, 코드가 모이는 곳).
   저장소별 값(`Settings.RepoBranches`)이 공통 값을 덮고, 일괄 작업이 저장소마다 풀어 쓴다(`BulkOperationOptions.WorkBranchFor`·`UploadBranchFor`).
-  계약: 「병합」은 고른 브랜치(비면 업로드 브랜치)를 `fetch` 한 뒤 지금 브랜치로 합치고, 「올리기」는 업로드 브랜치로 `push <remote> HEAD:refs/heads/<업로드>` 한다 — force 없음 · upstream 안 바꿈.
+  계약: 「병합」은 고른 브랜치(비면 업로드 브랜치)를 `fetch` 한 뒤 지금 브랜치로 합치고, 「올리기」는 두 벌이다 — 지금(작업) 브랜치를 제 원격 브랜치로, 업로드 브랜치가 다르면 거기에도 `push <remote> HEAD:refs/heads/<업로드>` 한다 — force 없음.
   계약: 지금 브랜치가 가져올 브랜치와 같으면 「병합」은 원격의 같은 브랜치(`<remote>/<브랜치>`)를 합친다 — 올리기가 거부된(갈라진) 저장소를 이 단추로 푼다. Pull 은 `--ff-only` 라 갈라지면 못 푼다.
   계약: 실패를 푸는 단추가 정해진 결과는 `BulkStepResult.NextAction`(`BulkNextAction`)에 그 이름을 싣고, 화면은 같은 이름을 `Nudge.Key` 로 단 단추를 깜빡인다(`Controls/Nudge.cs` · `MainViewModel.NudgeAction`). 다음 일괄 작업을 시작하면 꺼진다.
   함정: 접힌 단(Collapsed) 위의 덧그림은 WPF 가 지우지 않는다 — `Nudge` 가 단추의 `IsVisibleChanged` 를 따라 테를 함께 숨긴다(2026-10-11 「점검」 화면에 테가 남던 것).
   셋이다 — `merge`(올리기 거부 → 「지금 브랜치로 병합」) · `conflict`(충돌 → 상세 「충돌」 탭, 그 탭을 열면 꺼진다) · `switch`(작업 브랜치가 아님 → 「전환」). 결과가 섞이면 충돌 → 실패 → 건너뜀 차례로 첫 것을 고른다.
-  계약: 지금 브랜치가 작업 브랜치와 다르면 병합·커밋·올리기를 건너뛴다 — 단 작업 브랜치가 그 저장소에 없으면 막지 않는다(`GitService.NotOnWorkBranchAsync`).
+  계약: 지금 브랜치가 작업 브랜치와 다르면 병합·커밋·올리기를 건너뛴다 — 단 작업 브랜치가 그 저장소에(로컬에도 원격 추적 ref 에도) 없으면 막지 않는다(`GitService.NotOnWorkBranchAsync`).
+  ★ 계약: 커밋 · Push · 커밋 + Push 는 건너뛰기 전에 **먼저 묻는다** — 그런 저장소를 층(`Views/OffBranchLayer` · `MainViewModel.PushCheck.cs`)에 모아 저장소별로 체크받고, 체크한 것만 `BulkOperationOptions.ConfirmedBranches`(저장소 Id → 확인한 브랜치)로 넘겨 지금 브랜치 그대로 진행한다.
+  계약: 체크는 기본이 꺼짐이고 「취소」는 일괄 작업을 통째로 그만둔다. 확인한 뒤 브랜치가 바뀌었으면 다시 막는다. 병합은 묻지 않고 예전처럼 건너뛴다.
+  계약: 커밋은 됐는데 Push 되지 않은 저장소(`Ahead > 0` 또는 upstream 없음 · 원격 없는 저장소 제외)는 층(`Views/PushGapLayer`)이 저장소별로 보인다 — 띠 넷째 묶음의 「Push 전 n」 단추가 열고, Push 가 낀 일괄 작업 뒤에 남은 것이 있으면 저절로 뜬다.
+  ★ 계약: 그 층의 「받아서 Merge + Push」(`SyncPushGapAsync`)는 원격의 같은 브랜치를 합친 뒤(`BulkOperationOptions.MergeOwnRemote`) 이어서 Push 한다 — Merge 가 충돌·실패한 저장소는 Push 로 넘기지 않고, 층에 「충돌」 줄로 다시 모아 「충돌」 탭으로 안내한다. force 는 없다.
+  ★ 함정: `add -A` 는 충돌 표식(`<<<<<<<`)이 든 파일도 스테이지한다 — 풀지 않은 충돌이 있으면 `CommitAllAsync` 가 커밋하지 않고 「충돌」로 끝낸다(2026-10-11 실측: 표식째 main 에 올라갔다).
+  계약: 결과 문구에 「원격」이라고만 적지 않는다 — `origin/main` 처럼 원격·브랜치 이름으로, 업로드 브랜치면 「업로드 브랜치 origin/main」으로 적는다.
+  계약: 충돌 탭의 차이 요약은 세 층이다 — 저장소(`ConflictOverview`) · 파일 · 구간(`DiffSummary`). 구간마다 코드는 갈라지기 전(공통 조상) · 내 것 · 상대 것 셋을 보인다.
+  계약: 띠 네 묶음의 두 줄은 높이를 함께 쓴다(`SharedSizeGroup` `ActionRowTop`·`ActionRowBottom`) — 묶음마다 아래 여백이 달라지지 않는다.
+  계약: 저장소 목록의 「요약 보기」(`IsSummaryView` ↔ `Settings.RepoSummaryView`)는 줄을 둘로 줄인다 — 이름 줄, 그리고 브랜치 줄 오른쪽에 마지막 결과.
+  계약: 창 안에서 F5 는 「상태 새로 고침」, Shift+F5 는 「목록 새로 고침」이다(`Window.InputBindings`) — 전역 단축키가 아니다.
+  계약: 상태 줄의 갱신 줄(`MainViewModel.RefreshLine`)은 「2026-10-11 오후 10:06 갱신 · 3분 전 · 다음 22:11 · 4:12 후」 꼴이다 — 주기는 설정 「동기화」의 「상태 다시 읽기(분)」이고 1초 타이머(`_refreshLineTicker`)가 다시 그린다.
+  계약: 화면의 때는 **날짜 + 경과**로 적는다(`RepoRow.Ago`) — 저장소 줄의 다시 읽은 때(`RefreshedClockText` · 「2026-10-11 22:28:55 · 3분 전」)와 마지막 커밋(`LastCommitLine` · 「2026-08-23 · 7주 전 · 제목」)이 그렇다. 시각이나 경과 하나만 적지 않는다.
+  계약: 최대화된 창은 제목 띠를 끌어도 풀리지 않는다 — 두 번 누르거나 창 단추로만 푼다(`MainWindow.OnTitleMouseDown`).
+  함정: `MainWindow.xaml` 은 UTF-8 BOM 이다 — 스크립트로 다시 쓸 때 BOM 을 지우지 않는다.
+  계약: 일괄 작업의 대상·확인을 밖에서 줄 때는 `RunBulkAsync(kind, only, ownRemote, preset, showGap)` 를 쓴다 — 단추는 인자 없이 부른다(보이는 줄 중 고른 것).
+  계약: Pull 은 upstream 이 없으면 원격의 같은 이름을 받고, 그것도 없으면 실패가 아니라 건너뜀이다 — 갓 만든 작업 브랜치를 「실패」로 세지 않는다.
   계약: 「전환」은 고른 저장소를 작업 브랜치로 `switch` 한다 — 로컬에 없으면 원격의 같은 이름을 추적해 만들고, 둘 다 없으면 건너뛴다. 강제 옵션은 없다.
   함정: 업로드 브랜치가 지금 브랜치와 다를 때, 원격에 없는 이름으로는 올리지 않는다 — 그대로 올리면 새 원격 브랜치가 조용히 생긴다(2026-10-11 실측).
   계약: 그 판정은 로컬이 아는 ref(`refs/remotes/<remote>/<업로드>`)로 한다 — 원격에 있어도 Fetch 전이면 건너뛴다. 업로드 브랜치가 비면 지금 브랜치를 그대로 올린다(원격에 없으면 새로 생긴다).
@@ -99,7 +123,8 @@
   계약: 브랜치·그룹은 **있는 것 중에서 고른다**(고르는 상자) — 손으로 적는 칸은 「새 그룹 이름」 하나뿐이다. 줄 하나의 값은 줄을 두 번 누르거나 톱니로 여는 쪽지가 고친다(`MainViewModel.Branches.cs`).
   함정: 이 앱의 `ComboBox` 틀은 고른 줄을 `ToString` 으로 그린다 — 줄 객체가 `ToString` 을 안 덮으면 레코드 모양이 보인다.
   계약: 저장소 줄을 끌어 그룹 머리·다른 그룹의 줄·거르개 단의 「그룹」 줄에 놓으면 옮겨진다(`Views/MainWindow.Repos.cs`).
-- 계약: 필터 단은 조건 넷(그룹 · 상태 · 작업 · 브랜치)을 겹쳐 건다(`MainViewModel.Facets.cs`). 「작업 중」(`RepoRow.IsMine` ↔ `Settings.WorkingRepos`)은 일괄 작업이 도는 중(`IsWorking`)과 다른 뜻이다.
+- 계약: 필터 단은 조건 넷(그룹 · 상태 · 작업 · 브랜치)을 겹쳐 건다(`MainViewModel.Facets.cs`).
+  계약: 「브랜치」는 **설정 기준으로 둘로 나눈다** — 「공통 설정」(공통 작업·업로드 브랜치를 따르는 저장소)과 「저장소별 설정」(`Settings.RepoBranches` 를 따로 정한 저장소). 묶음 머리는 묶음만, 그 아래 줄은 묶음 + 지금 브랜치 이름을 함께 건다(`BranchScope` · `BranchFilter`). 「작업 중」(`RepoRow.IsMine` ↔ `Settings.WorkingRepos`)은 일괄 작업이 도는 중(`IsWorking`)과 다른 뜻이다.
 - 함정: 단추 템플릿의 내용 가로 맞춤은 `HorizontalContentAlignment` 를 따른다 — `Center` 로 박으면 줄 모양 단추(필터 단)가 가운데로 몰린다.
   제목 띠는 **테마와 무관하게 짙다** — 띠 위의 글자·단추는 테마 브러시가 아니라 `Styles.xaml` 의 `Title*` 브러시를 쓴다.
 - ★ 계약: 저장소 목록은 **`RepoRow.GroupNode` 객체로 묶인다**(`PropertyGroupDescription`) — 그룹 머리가 `{Binding Name.…}` 으로 접힘·건수를 읽는다.
@@ -107,9 +132,10 @@
   함정: 묶인 `ListBox` 는 `ScrollViewer.CanContentScroll="False"` 여야 한다 — 켜 두면 그룹 단위로 뚝뚝 넘어간다.
 - 계약: 대시보드의 카드·줄은 **건너가는 길**이다 — `GoToState`·`GoToGroup`·`GoToRepo` 가 거르개를 맞추고 1번 화면으로 옮긴다.
   계약: 건너갈 때는 남아 있던 검색어·거르개를 먼저 푼다(`ResetFilters`) — 겹치면 빈 목록으로 보인다.
-- 계약: 대시보드는 `Views/DashboardView` 한 파일이다 — 통계 카드 여덟의 수는 `MainViewModel.Dashboard.cs`, 그림은 `Controls/ChartView`(라이브러리 없이 직접 그린다)가 맡는다.
+- 계약: 대시보드는 `Views/DashboardView` 한 파일이다 — 통계 카드의 수는 `MainViewModel.Dashboard.cs`, 그림은 `Controls/ChartView`(라이브러리 없이 직접 그린다)가 맡는다.
   표시 방식은 카드 머리 고르개가 바꾸고 **고르는 즉시** `Settings.DashboardChartKinds` 에 남는다. 범주 색은 여덟 고정 — 넘치면 자료 쪽이 「기타」로 접는다.
-- 계약: 「상태 새로 고침」은 저장소마다 git 을 두 번 더 부른다 — 바뀐 것이 있을 때만 `diff HEAD --shortstat`(추가·삭제 줄 수), 늘 `log --since=735.days.ago --format=%cs`(커밋 캘린더 — 가장 긴 기간 2년치).
+  계약: 통계 칸은 일곱(`Slots`)이고 고를 통계는 열다섯이다 — 「UI 편집」 중 카드 제목 자리의 고르개가 바꾸고, 이미 다른 칸에 있으면 맞바꾼다. 자리는 `DashboardChartKinds["slot.<n>"]` 에 즉시 남는다.
+- 계약: 「상태 새로 고침」은 저장소마다 git 을 다섯 번 더 부른다 — 바뀐 것이 있을 때만 `diff HEAD --shortstat`(추가·삭제 줄 수), 늘 `log --since=735.days.ago --format=%cs`(커밋 캘린더 — 가장 긴 기간 2년치)와 `ls-files`(확장자 구성 · 추적 파일 수) · `log --format=%cd%x09%an`(작성자별 · 시간대별 커밋) · `count-objects -v`(.git 용량).
   함정: 줄 수는 추적 전 새 파일을 세지 않는다 — 세려면 파일을 다 읽어야 해서 일부러 뺐다. 캘린더는 지금 브랜치의 커밋만, 작성자를 가르지 않고 센다.
 - 계약: 카드 크기는 **「UI 편집」 중에만** 바뀐다 — 나누개(`LayoutSplitter`)는 평소 꺼진 빈 간격이고, 「배치 저장」이 별(*) 비율을 `Settings.DashboardLayout` 에 적는다.
   함정: 격자의 짝수 자리가 카드, 홀수 자리가 나누개다 — 카드를 더하면 `DashboardView.xaml.cs` 의 `Defaults` 칸 수도 함께 고친다(안 맞는 저장값은 버려진다).
@@ -123,7 +149,15 @@
   「병합 마무리」는 **병합(MERGE_HEAD)일 때만** `commit --no-edit` 을 한다 — 리베이스·체리픽 이어 가기는 넣지 않았다.
 - 함정: 추적 전 파일은 `git diff` 가 빈 결과를 낸다 — `--no-index` 로 `/dev/null` 과 견준다(`NUL` 로 바꾸면 안 읽는다).
 - 계약: 그룹은 **사용자가 지정한 것(`Settings.RepoGroups`)이 스캔이 매긴 폴더 이름을 덮는다.** 그룹을 지워도 저장소는 남는다.
+  계약: 스캔이 매기는 이름은 루트의 `ScanRoot.GroupLevel` 이 정한다 — 0 은 바로 위 폴더, 1·2 는 루트에서 그 단계까지의 폴더(`RepoKey.GroupUnder`, 2단계는 `JHJ / 900.Legacy` 꼴). 다른 출처가 먼저 들고 온 저장소도 `RepoRegistry.ApplyRootGroup` 이 합친 뒤 다시 매긴다.
+  계약: 설정 「목록 출처」의 「폴더 기준으로 다시 잡기」·「목록·그룹 초기화」·「전체 초기화」는 **「적용」을 기다리지 않는다** — 확인 한 번 뒤 바로 저장하고 다시 훑는다(`SettingsViewModel.Remap.cs`). 설정 파일만 고치고 저장소·git 에는 손대지 않는다.
+  함정: 「전체 초기화」는 속성을 통째로 옮긴다(`AppSettings.ResetEverything`) — 언어만 남긴다. 「기본값으로」(`ResetToDefaults`)는 여전히 루트·수동 추가·숨김·그룹을 남긴다.
+- ★ 계약: 상세 「작업」 탭(`Views/RepoToolsView` · `MainViewModel.Tools.cs`)은 GitHub Desktop 에 있던 한 저장소짜리 일을 모은 곳이다 — Clone · 새 저장소 · 브랜치 만들기/이름 바꾸기/지우기 · 마지막 커밋 되돌리기/고치기 · Revert · Cherry-pick · stash 넣기/꺼내기 · 태그 · 원격 주소 · Pull Request(브라우저).
+  ⛔ 여기에도 되돌릴 수 없는 명령을 넣지 않는다 — 지우기는 `branch -d`, 되돌리기는 `reset --soft` 다. 변경 버리기(discard) · rebase · squash · 커밋 순서 바꾸기는 force push 나 내용 소실이 따라와 **일부러 뺐다.**
+  계약: 「되돌리기」·「고치기」는 HEAD 가 어느 원격 추적 ref 에도 없을 때만 돈다(`HeadIsLocalOnlyAsync`) — 올린 커밋은 Revert 로만 뒤집는다.
+  함정: 이 탭은 `IGitService` 를 거치지 않고 `_gitRunner` 로 git 을 바로 부른다 — 일괄 작업과 겹치지 않게 `IsBusy` 를 함께 쥔다.
 - 계약: 줄마다 `RefreshedAt` 을 찍는다 — 「상태 새로 고침」이 값을, 1분 타이머가 경과 글자(`TouchElapsed`)를 다시 그린다.
+- 계약: 기본 아이콘(`Resources/app-icon.ico`)은 **금박 JG** 다 — 모든 크기에 두 글자이고 밝은 금만 쓴다(`make_jhj_icon.py branch … --palette violet --style foil --mono JG`). 설정 「아이콘」의 선택지는 `Services/IconPresets.cs` 이고 옛 기본 그림은 「JHJ + 가지」(`app-icon-classic.ico`)로 남겼다.
 - ★ 함정: 아이콘 `.ico` 는 **128 이하를 BMP 로** 적어야 한다 — Pillow 12 의 ICO 저장은 전부 PNG 로 눌러 담고,
   Windows 의 작은 아이콘 경로(작업 표시줄·Alt+Tab)가 그것을 못 읽어 기본 아이콘이 뜬다.
   생성기 `JHJ_DEV/000.AGENTS_MD/070.아이콘/make_jhj_icon.py` 의 `write_ico()` 가 맡는다(2026-10-10 수정).

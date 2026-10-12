@@ -39,6 +39,9 @@ $PackagePrefix = 'JHJ_Git-Center'
 $ExtraFiles    = @()
 # Contract: must equal AppUpdate.SetupAssetName in the app - the fixed name behind releases/latest/download/<name>. Empty = none.
 $SetupAsset    = 'JHJ_Git-Center_Setup.exe'
+# Contract: the installer project (net48, Jhj.Core.Setup). Its AssemblyName must equal $SetupAsset without '.exe'.
+# Never ship the app exe under the setup name - see JHJ_CS_CORE\300.Docs\040 (install spec) section 1.
+$SetupProjectRel = '200.Source\GitCenter.Setup\GitCenter.Setup.csproj'
 # -------------------------------------------------------------------------
 
 if ("$AppExe$ProjectRel" -match '[<>]') { throw "publish.ps1 is still the template - fill in the CONFIG block first." }
@@ -118,14 +121,6 @@ foreach ($rid in $platforms) {
     Write-Checksum -Path $exeAsset
     Write-Host "Created: $exeAsset" -ForegroundColor Green
 
-    # Why: a versioned name cannot be linked once and stay valid - the same exe also ships under one fixed name (x64 only).
-    if ($SetupAsset -and $rid -eq 'win-x64') {
-        $setupPath = Join-Path $outputBase $SetupAsset
-        Copy-Item -LiteralPath $exeAsset -Destination $setupPath -Force
-        Write-Checksum -Path $setupPath
-        Write-Host "Created: $setupPath" -ForegroundColor Green
-    }
-
     if ($PackagePrefix) {
         # Contract: <prefix>-<rid>-v<release>.zip - installed builds look for exactly this name. Never rename casually.
         $zipPath = Join-Path $outputBase "$PackagePrefix-$rid-v$Release.zip"
@@ -133,6 +128,36 @@ foreach ($rid in $platforms) {
         Compress-Archive -Path "$outputPath\*" -DestinationPath $zipPath
         Write-Checksum -Path $zipPath
         Write-Host "Created: $zipPath" -ForegroundColor Green
+    }
+
+    # Contract: the setup file is a real installer that carries the package zip (x64 only) - not a copy of the app exe.
+    # Why two names: the fixed name stays valid behind releases/latest/download/<name>; the versioned copy shows which build it installs.
+    if ($SetupAsset -and $SetupProjectRel -and $PackagePrefix -and $rid -eq 'win-x64') {
+        $setupOut = Join-Path $outputBase "setup-build"
+        if (Test-Path $setupOut) { Remove-Item -LiteralPath $setupOut -Recurse -Force }
+        dotnet build (Join-Path $repoRoot $SetupProjectRel) `
+            --configuration $Configuration `
+            --output $setupOut `
+            --nologo `
+            -p:PackageZip=$zipPath `
+            -p:VersionPrefix=$Version `
+            -p:Version=$Version `
+            -p:BuildDate=$BuildDate
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to build the setup project" -ForegroundColor Red
+            exit 1
+        }
+
+        $setupPath = Join-Path $outputBase $SetupAsset
+        Copy-Item -LiteralPath (Join-Path $setupOut $SetupAsset) -Destination $setupPath -Force
+        Write-Checksum -Path $setupPath
+        Write-Host "Created: $setupPath" -ForegroundColor Green
+
+        $setupVersioned = Join-Path $outputBase ($SetupAsset -replace '\.exe$', "_$Release.exe")
+        Copy-Item -LiteralPath $setupPath -Destination $setupVersioned -Force
+        Write-Checksum -Path $setupVersioned
+        Write-Host "Created: $setupVersioned" -ForegroundColor Green
+        Remove-Item -LiteralPath $setupOut -Recurse -Force
     }
 }
 

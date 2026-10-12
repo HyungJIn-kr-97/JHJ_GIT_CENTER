@@ -238,7 +238,7 @@ public sealed class IconChoiceLabelConverter : IValueConverter
         var choice = value as string ?? string.Empty;
         if (choice.Length == 0)
         {
-            return Loc.T("기본 (JHJ)");
+            return Loc.T("기본 (금박 JG)");
         }
 
         if (choice.StartsWith(Jhj.Core.Wpf.Shell.AppIcon.PresetPrefix, StringComparison.Ordinal))

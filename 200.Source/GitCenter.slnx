@@ -3,4 +3,5 @@
   <Project Path="GitCenter.Application/GitCenter.Application.csproj" />
   <Project Path="GitCenter.Core/GitCenter.Core.csproj" />
   <Project Path="GitCenter.Infrastructure/GitCenter.Infrastructure.csproj" />
+  <Project Path="GitCenter.Setup/GitCenter.Setup.csproj" />
 </Solution>

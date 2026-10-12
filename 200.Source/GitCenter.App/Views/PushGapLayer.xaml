@@ -1,0 +1,108 @@
+<UserControl x:Class="GitCenter.App.Views.PushGapLayer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf"
+             xmlns:vm="clr-namespace:GitCenter.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+             Visibility="{Binding IsPushGapOpen, Converter={StaticResource BoolToVisibility}}">
+
+    <!--
+      커밋과 Push 상태가 다른 저장소를 저장소별로 보이는 층(MainViewModel.PushCheck.cs).
+      계약: 띠의 「Push 전」 단추가 열고, Push 가 낀 일괄 작업 뒤에 남은 것이 있으면 저절로 뜬다 - 읽기뿐이다.
+      계약: 폭은 창의 절반(별 비율)이고 px 는 하한뿐이다 - 목록이 길면 카드 안에서만 스크롤한다.
+    -->
+    <Grid Background="{StaticResource ScrimBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="2*" MinWidth="560" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="6*" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Column="1" Grid.Row="1" VerticalAlignment="Center"
+                Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource DividerBrush}"
+                BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="18,16">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="24" ShadowDepth="6" Direction="270" Opacity="0.3" Color="#000000" />
+            </Border.Effect>
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <TextBlock Text="{Binding PushGapCaption}" Style="{StaticResource Subtitle}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,0"
+                               Text="{loc:Tr '저장소를 누르면 그 줄로 갑니다. 「이 저장소만 고르기」는 목록의 체크를 이 저장소들로 바꿉니다.'}" />
+                    <!-- 계약: 충돌 난 저장소는 「받아서 Merge + Push」가 올리지 않는다 - 따로 풀라고 안내한다 -->
+                    <TextBlock TextWrapping="Wrap" Margin="0,7,0,0" FontSize="{StaticResource FontSm}"
+                               Foreground="{DynamicResource WarnBrush}"
+                               Visibility="{Binding PushGapHasConflict, Converter={StaticResource BoolToVisibility}}"
+                               Text="{loc:Tr '충돌이 난 저장소는 올리지 않았습니다. 줄을 눌러 「충돌」 탭에서 풀고 「병합 마무리」 뒤 다시 Push 해 주십시오.'}" />
+                </StackPanel>
+
+                <Grid DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <!-- 계약: 받아야 올릴 수 있는 저장소를 여기서 바로 푼다 - 원격의 같은 브랜치를 Merge 한 뒤 이어서 Push 한다(force 없음) -->
+                    <Button HorizontalAlignment="Left" Command="{Binding SyncPushGapCommand}"
+                            Visibility="{Binding PushGapCanSync, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="{loc:Tr '저장소마다 지금 브랜치가 올라가는 곳(예: origin/main)을 받아 Merge 한 뒤 이어서 Push 합니다 — 충돌하면 그 저장소는 올리지 않고 따로 알려 줍니다'}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconMerge}" Margin="0,0,6,0" />
+                            <TextBlock Text="{loc:Tr '받아서 Merge + Push'}" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="1" Content="{loc:Tr '이 저장소만 고르기'}" Command="{Binding SelectPushGapCommand}"
+                            Visibility="{Binding PushGapRows.Count, Converter={StaticResource CountToVisibility}}" />
+                    <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" Margin="6,0,0,0"
+                            Content="{loc:Tr '닫기'}" Command="{Binding ClosePushGapCommand}" IsCancel="True" />
+                </Grid>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding PushGapRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderBrush="{DynamicResource SubtleOverlayBrush}" BorderThickness="0,1,0,0">
+                                    <Button Style="{StaticResource GhostButton}" Padding="4,7"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                            Command="{Binding DataContext.ShowPushGapRepoCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="3*" />
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="3*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Row="1" Text="{Binding Group}" Style="{StaticResource Micro}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="1" Grid.RowSpan="2" Text="{Binding Branch}" Margin="10,0"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2" Text="{Binding StateText}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AheadBrush}" HorizontalAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2" Grid.Row="1" Text="{Binding Result}" Style="{StaticResource Micro}"
+                                                       HorizontalAlignment="Right" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Result}" />
+                                        </Grid>
+                                    </Button>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>

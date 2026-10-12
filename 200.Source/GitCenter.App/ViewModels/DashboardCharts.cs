@@ -61,6 +61,28 @@ public sealed partial class ChartCard(string key, string title, IReadOnlyList<Ch
     /// 계약: 그림의 줄(막대·칸)을 눌렀을 때 그 ChartRow 를 받아 도는 명령 — null 이면 눌러도 아무 일이 없다
     public System.Windows.Input.ICommand? RowCommand { get; set; }
 
+    // 함정: 이 앱의 ComboBox 틀은 고른 줄을 ToString 으로 그린다 — 안 덮으면 고르개에 형식 이름이 찍힌다
+    public override string ToString() => Title;
+
+    /// 계약: 칸에 올릴 수 있는 통계 전부다 — 「UI 편집」 중 제목 자리의 고르개가 읽는다
+    public IReadOnlyList<ChartCard> Choices { get; set; } = [];
+
+    /// 계약: 고르개가 다른 통계를 고르면 (지금 카드, 고른 카드)로 불린다 — 칸을 바꾸는 일은 MainViewModel 이 한다
+    public Action<ChartCard, ChartCard>? PickRequested { get; set; }
+
+    /// 계약: 읽으면 늘 자기 자신이다 — 고르개가 이 칸의 통계를 고른 줄로 보여 준다
+    public ChartCard Pick
+    {
+        get => this;
+        set
+        {
+            if (value is not null && !ReferenceEquals(value, this))
+            {
+                PickRequested?.Invoke(this, value);
+            }
+        }
+    }
+
     /// 계약: 사용자가 표시 방식이나 기간을 바꿨을 때만 불린다 — MainViewModel 이 받아 설정에 적는다
     public Action<ChartCard>? KindChanged { get; set; }
 

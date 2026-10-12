@@ -62,6 +62,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         StartAtLogin = StartupRegistry.IsRegistered() && !StartupRegistry.IsDisabledByTaskManager();
         LoadIconChoices();
+        InitRemap();
     }
 
     public AppSettings Settings { get; }
@@ -552,16 +553,21 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         if (group is SettingsGroup.Display)
         {
-            ThemeManager.ApplyPreference(Settings.Palette, Settings.Theme);
-            Loc.SetLanguage(Settings.Language);
-            LoadIconChoices();
-            AppIcon.Apply(Settings.AppIcon);
-            _main.NotifyDisplaySettingsChanged();
-
-            // 왜: 설정값만 되돌리면 등록된 키는 옛 값 그대로다 — 등록과 줄 목록을 함께 맞춘다
-            Jhj.Core.Wpf.Hotkeys.HotkeyService.Current?.Reload([Settings.Hotkey, .. Settings.ExtraHotkeys]);
-            Hotkeys.Rebuild();
+            ReapplyDisplay();
         }
+    }
+
+    private void ReapplyDisplay()
+    {
+        ThemeManager.ApplyPreference(Settings.Palette, Settings.Theme);
+        Loc.SetLanguage(Settings.Language);
+        LoadIconChoices();
+        AppIcon.Apply(Settings.AppIcon);
+        _main.NotifyDisplaySettingsChanged();
+
+        // 왜: 설정값만 되돌리면 등록된 키는 옛 값 그대로다 — 등록과 줄 목록을 함께 맞춘다
+        Jhj.Core.Wpf.Hotkeys.HotkeyService.Current?.Reload([Settings.Hotkey, .. Settings.ExtraHotkeys]);
+        Hotkeys.Rebuild();
     }
 }
 
@@ -586,6 +592,17 @@ public sealed partial class ScanRootRow(ScanRoot model) : ObservableObject
         set
         {
             Model.Depth = Math.Clamp(value, 0, 8);
+            OnPropertyChanged();
+        }
+    }
+
+    /// 계약: 0 은 바로 위 폴더 이름, 1·2 는 루트에서 그 단계까지의 폴더 이름이다(RepoKey.GroupUnder)
+    public int GroupLevel
+    {
+        get => Model.GroupLevel;
+        set
+        {
+            Model.GroupLevel = Math.Clamp(value, 0, 2);
             OnPropertyChanged();
         }
     }

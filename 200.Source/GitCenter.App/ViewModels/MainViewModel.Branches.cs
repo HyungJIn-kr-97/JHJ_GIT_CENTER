@@ -236,6 +236,7 @@ public sealed partial class MainViewModel
 
         Settings.AssignBranches(row.Id, EditWork, EditUpload);
         SyncBranchRules();
+        RefreshFacets();
         _ = SaveSettingsAsync();
     }
 

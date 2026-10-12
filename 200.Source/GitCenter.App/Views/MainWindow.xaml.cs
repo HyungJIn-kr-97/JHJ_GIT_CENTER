@@ -86,8 +86,8 @@ public partial class MainWindow : Window
 
     private void OnActionTopRowSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // 함정: WrapPanel 의 폭은 줄 바꿈 뒤의 폭이다 — 자식 폭의 합이 한 줄 폭이다. 띠 안팎 여백(12+12 · 12+12)과 테두리를 더한다
-        var row = ActionTopRow.Children.OfType<UIElement>().Sum(c => c.DesiredSize.Width) + 50;
+        // 계약: 묶음 셋(브랜치 · 받기 · 병합)의 폭 + 올리기 묶음의 최소 폭(430) + 띠 안팎 여백·테두리(50)가 창의 최소 폭이다
+        var row = ActionTopRow.Children.OfType<UIElement>().Sum(c => c.DesiredSize.Width) + 430 + 50;
         if (Math.Abs(row - _actionRowWidth) < 0.5)
         {
             return;
@@ -97,6 +97,9 @@ public partial class MainWindow : Window
         ApplyDisplaySettings();
     }
 
+    // 계약: 복원 크기의 기본은 화면 비율 그대로 작업 영역 넓이의 60% 쯤이다 — 변마다 √0.6 을 곱한다(2026-10-11 사용자 지시)
+    private const double RestoreRatio = 0.775;
+
     /// 계약: 복원 크기는 사용자 화면의 작업 영역에 맞추고, 처음에는 최대화로 연다 — 규격은 080.CS앱-화면-공통.md §3
     private void ApplyStartupSize()
     {
@@ -104,10 +107,21 @@ public partial class MainWindow : Window
 
         // 왜: 옛 기본값(1480×900)이 그대로 저장된 PC 는 고른 적이 없는 것이다 — 한 번만 화면 기준으로 다시 잡는다
         var legacyDefault = Math.Abs(settings.WindowWidth - 1480) < 0.5 && Math.Abs(settings.WindowHeight - 900) < 0.5;
-        var width = legacyDefault ? 0 : settings.WindowWidth;
-        var height = legacyDefault ? 0 : settings.WindowHeight;
+        // 함정: 화면을 꽉 채운 크기가 저장돼 있으면 최대화를 풀어도 창이 그대로다 — 고른 적 없는 값으로 보고 기본 크기를 쓴다
+        var work = SystemParameters.WorkArea;
+        var fillsScreen = settings.WindowWidth >= work.Width - 1 && settings.WindowHeight >= work.Height - 1;
+        var auto = legacyDefault || fillsScreen;
+        if (auto)
+        {
+            // 왜: 꽉 찬 크기와 함께 저장된 자리(-2,-10)는 화면 밖이다 — 기본 크기를 쓸 때는 자리도 가운데로 되돌린다
+            settings.WindowLeft = double.NaN;
+            settings.WindowTop = double.NaN;
+        }
 
-        WindowFit.Apply(this, width, height);
+        var width = auto ? 0 : settings.WindowWidth;
+        var height = auto ? 0 : settings.WindowHeight;
+
+        WindowFit.Apply(this, width, height, RestoreRatio);
 
         if (settings.WindowMaximized)
         {
@@ -183,10 +197,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        // 함정: 최대화 상태에서 DragMove 를 부르면 예외가 난다 — 끌기 시작 전에 이전 크기로 돌린다
+        // 계약: 최대화된 창은 제목 띠를 끌어도 풀리지 않는다 — 두 번 누르거나 창 단추로만 푼다(2026-10-11 사용자 지시: 한 번 잘못 눌러도 작아졌다)
+        // 함정: 최대화 상태에서 DragMove 를 부르면 예외가 난다 — 그래서 부르지 않고 그냥 돌아간다
         if (WindowState == WindowState.Maximized)
         {
-            RestoreUnderCursor();
+            return;
         }
 
         DragMove();
@@ -206,17 +221,6 @@ public partial class MainWindow : Window
     private void ToggleMaximize()
     {
         WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-    }
-
-    // 왜: 최대화된 창을 끌면 커서가 잡고 있던 가로 위치를 유지해야 자연스럽다 — Windows 기본 동작과 같다
-    private void RestoreUnderCursor()
-    {
-        var cursor = PointToScreen(Mouse.GetPosition(this));
-        var ratio = ActualWidth <= 0 ? 0.5 : Mouse.GetPosition(this).X / ActualWidth;
-
-        WindowState = WindowState.Normal;
-        Left = cursor.X - RestoreBounds.Width * ratio;
-        Top = cursor.Y - 16;
     }
 
     /// 계약: 최대화·이전 크기에 맞춰 가운데 단추 그림을 바꾼다

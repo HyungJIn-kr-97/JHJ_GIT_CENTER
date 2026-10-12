@@ -47,38 +47,20 @@ public sealed partial class RepoRow : ObservableObject
         OnPropertyChanged(nameof(HasUserGroup));
     }
 
-    partial void OnRefreshedAtChanged(DateTimeOffset? value) => OnPropertyChanged(nameof(RefreshedText));
+    partial void OnRefreshedAtChanged(DateTimeOffset? value)
+    {
+        OnPropertyChanged(nameof(RefreshedText));
+        OnPropertyChanged(nameof(RefreshedClockText));
+    }
+
+    /// 계약: 이 저장소의 상태를 다시 읽은 때 — 「2026-10-11 22:28:55 · 3분 전」 꼴로 줄 첫머리 오른쪽에 늘 보인다(요약 보기에서도)
+    /// 왜: 시각만 적으면 몇 시간·며칠 지난 값인지 알 수 없다 — 날짜와 경과를 함께 적는다(2026-10-11 사용자 지시)
+    public string RefreshedClockText => RefreshedAt is { } at
+        ? $"{at.ToLocalTime():yyyy-MM-dd HH:mm:ss} · {Ago(at)}"
+        : string.Empty;
 
     /// <summary>「방금 · 3분 전」처럼 사람이 읽는 경과.</summary>
-    /// 왜: 절대 시각은 지금과 견주려면 머리를 써야 한다 — 목록에서는 경과가 바로 읽힌다
-    public string RefreshedText
-    {
-        get
-        {
-            if (RefreshedAt is not { } at)
-            {
-                return string.Empty;
-            }
-
-            var span = DateTimeOffset.Now - at;
-            if (span < TimeSpan.FromSeconds(45))
-            {
-                return "방금";
-            }
-
-            if (span < TimeSpan.FromHours(1))
-            {
-                return $"{(int)span.TotalMinutes}분 전";
-            }
-
-            if (span < TimeSpan.FromDays(1))
-            {
-                return $"{(int)span.TotalHours}시간 전";
-            }
-
-            return at.ToString("MM-dd HH:mm");
-        }
-    }
+    public string RefreshedText => RefreshedAt is { } at ? Ago(at) : string.Empty;
 
     /// 계약: 말풍선·상세에 쓰는 정확한 시각
     public string RefreshedExactText => RefreshedAt is { } at
@@ -89,23 +71,42 @@ public sealed partial class RepoRow : ObservableObject
     public void TouchElapsed()
     {
         OnPropertyChanged(nameof(RefreshedText));
+        OnPropertyChanged(nameof(RefreshedClockText));
         OnPropertyChanged(nameof(LastCommitLine));
     }
 
-    private static string Ago(DateTimeOffset at)
+    /// 계약: 「방금 · 3분 전 · 5시간 전 · 6일 전 · 7주 전 · 4개월 전 · 2년 전」 — 날짜 옆에 붙여 쓰는 경과다(날짜를 대신하지 않는다)
+    internal static string Ago(DateTimeOffset at)
     {
         var span = DateTimeOffset.Now - at;
+        if (span < TimeSpan.FromSeconds(45))
+        {
+            return Loc.T("방금");
+        }
+
         if (span < TimeSpan.FromHours(1))
         {
-            return $"{Math.Max(1, (int)span.TotalMinutes)}분 전";
+            return Loc.T("{0}분 전", Math.Max(1, (int)span.TotalMinutes));
         }
 
         if (span < TimeSpan.FromDays(1))
         {
-            return $"{(int)span.TotalHours}시간 전";
+            return Loc.T("{0}시간 전", (int)span.TotalHours);
         }
 
-        return span < TimeSpan.FromDays(60) ? $"{(int)span.TotalDays}일 전" : at.ToString("yyyy-MM-dd");
+        if (span < TimeSpan.FromDays(14))
+        {
+            return Loc.T("{0}일 전", (int)span.TotalDays);
+        }
+
+        if (span < TimeSpan.FromDays(60))
+        {
+            return Loc.T("{0}주 전", (int)(span.TotalDays / 7));
+        }
+
+        return span < TimeSpan.FromDays(365)
+            ? Loc.T("{0}개월 전", (int)(span.TotalDays / 30))
+            : Loc.T("{0}년 전", (int)(span.TotalDays / 365));
     }
 
     [ObservableProperty]
@@ -150,6 +151,15 @@ public sealed partial class RepoRow : ObservableObject
     /// 계약: 최근 1년의 커밋 날짜(커밋 하나에 하나) — 「상태 새로 고침」이 채우고 대시보드 「커밋 캘린더」가 센다
     public IReadOnlyList<DateOnly> CommitDays { get; set; } = [];
 
+    /// 계약: 추적 파일 수를 확장자별로 센 것 — 「상태 새로 고침」이 채우고 대시보드의 확장자·크기 통계가 센다
+    public IReadOnlyDictionary<string, int> FileExtensions { get; set; } = new Dictionary<string, int>();
+
+    /// 계약: 최근 2년 커밋의 작성자별 · 시간대별 수 — 「상태 새로 고침」이 채운다
+    public CommitFacts CommitFacts { get; set; } = CommitFacts.Empty;
+
+    /// 계약: .git 객체 크기(KiB) — 「상태 새로 고침」이 채운다
+    public long ObjectSizeKib { get; set; }
+
     public int Ahead => Status?.Ahead ?? 0;
 
     public int Behind => Status?.Behind ?? 0;
@@ -163,7 +173,7 @@ public sealed partial class RepoRow : ObservableObject
 
     /// <summary>「3일 전 · 커밋 제목」 — 목록과 대시보드가 함께 쓴다.</summary>
     public string LastCommitLine => Status?.LastCommitWhen is { } at
-        ? $"{Ago(at)} · {Status.LastCommitSubject}"
+        ? $"{at.ToLocalTime():yyyy-MM-dd} · {Ago(at)} · {Status.LastCommitSubject}"
         : string.Empty;
 
     /// 계약: 작을수록 먼저 봐야 한다 — 0 문제·충돌 · 1 받을 것 · 2 올릴 것 · 3 변경 · 4 깨끗함

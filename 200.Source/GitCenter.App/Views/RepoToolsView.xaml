@@ -1,0 +1,146 @@
+<UserControl x:Class="GitCenter.App.Views.RepoToolsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf">
+    <!--
+      상세 「작업」 탭 — 카드 하나에 글상자 하나와 단추 몇 개다. 로직은 MainViewModel.Tools.cs.
+      계약: 로직이 없는 조각이다 — DataContext(MainViewModel)는 MainWindow 에서 물려받는다.
+      계약: 「저장소 더하기」 카드만 고른 저장소 없이도 쓴다 — 나머지는 SelectedRow 가 없으면 꺼진다.
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+        <StackPanel>
+            <TextBlock Text="{Binding ToolsCaption}" Style="{StaticResource Caption}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource WarnBrush}" Margin="2,0,0,8"
+                       Visibility="{Binding ToolsCaption, Converter={StaticResource EmptyToVisibility}}" />
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="{loc:Tr '저장소 더하기'}" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="{loc:Tr '둘 폴더를 비우면 첫 루트 폴더에 만듭니다. 「미 clone」 저장소를 고른 채면 주소를 비워도 됩니다.'}" />
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="70" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Tr '둘 폴더'}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding CloneFolder, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="2" Content="{loc:Tr '폴더 고르기'}" Command="{Binding PickCloneFolderCommand}"
+                                Margin="6,0,0,0" />
+                    </Grid>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="70" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Tr '주소'}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding CloneUrl, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="2" Content="Clone" Command="{Binding CloneRepoCommand}"
+                                Style="{StaticResource PrimaryButton}" Margin="6,0,0,0" />
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="70" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Tr '새 이름'}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding NewRepoName, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="2" Content="{loc:Tr '새 저장소 만들기'}" Command="{Binding CreateRepoCommand}"
+                                Margin="6,0,0,0" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <StackPanel IsEnabled="{Binding SelectedRow, Converter={StaticResource NullToBool}}">
+
+                <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Tr '브랜치'}" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Text="{loc:Tr '이름을 적고 할 일을 고릅니다. 지우기는 병합된 로컬 브랜치만 됩니다.'}" />
+                        <TextBox Text="{Binding BranchNameInput, UpdateSourceTrigger=PropertyChanged}" />
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button Content="{loc:Tr '새 브랜치 만들어 옮기기'}" Command="{Binding CreateBranchCommand}"
+                                    Style="{StaticResource PrimaryButton}" Margin="0,0,6,4" />
+                            <Button Content="{loc:Tr '지금 브랜치를 이 이름으로'}" Command="{Binding RenameBranchCommand}"
+                                    Margin="0,0,6,4" />
+                            <Button Content="{loc:Tr '이 브랜치 지우기'}" Command="{Binding DeleteBranchCommand}"
+                                    Style="{StaticResource DangerButton}" Margin="0,0,0,4" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Tr '마지막 커밋'}" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Text="{loc:Tr '아직 올리지 않은 커밋만 됩니다. 되돌려도 바꾼 내용은 남습니다.'}" />
+                        <TextBox Text="{Binding AmendMessage, UpdateSourceTrigger=PropertyChanged}" />
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button Content="{loc:Tr '이 메시지로 고치기'}" Command="{Binding AmendCommitCommand}"
+                                    Margin="0,0,6,4" />
+                            <Button Content="{loc:Tr '마지막 커밋 되돌리기'}" Command="{Binding UndoCommitCommand}"
+                                    Margin="0,0,0,4" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Tr '커밋 해시로'}" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Text="{loc:Tr 'Revert 는 그 커밋을 뒤집는 새 커밋을, Cherry-pick 은 그 커밋을 지금 브랜치에 얹습니다. 해시는 「커밋 내역」·「브랜치」 탭에 있습니다.'}" />
+                        <TextBox Text="{Binding CommitShaInput, UpdateSourceTrigger=PropertyChanged}" />
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button Content="Revert" Command="{Binding RevertCommitCommand}" Margin="0,0,6,4" />
+                            <Button Content="Cherry-pick" Command="{Binding CherryPickCommand}" Margin="0,0,0,4" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="Stash" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Text="{loc:Tr '바꾼 내용을 잠시 치워 두었다가 다시 꺼냅니다. 메모는 비워도 됩니다.'}" />
+                        <TextBox Text="{Binding StashMessage, UpdateSourceTrigger=PropertyChanged}" />
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button Content="{loc:Tr '변경 넣어 두기'}" Command="{Binding StashPushCommand}" Margin="0,0,6,4" />
+                            <Button Content="{loc:Tr '마지막 것 꺼내기'}" Command="{Binding StashPopCommand}" Margin="0,0,0,4" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Tr '태그'}" Style="{StaticResource SectionTitle}" />
+                        <TextBox Text="{Binding TagNameInput, UpdateSourceTrigger=PropertyChanged}" />
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button Content="{loc:Tr '지금 커밋에 태그 만들기'}" Command="{Binding CreateTagCommand}"
+                                    Margin="0,0,6,4" />
+                            <Button Content="{loc:Tr '이 태그 올리기'}" Command="{Binding PushTagCommand}" Margin="0,0,0,4" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Tr '원격'}" Style="{StaticResource SectionTitle}" />
+                        <TextBox Text="{Binding RemoteUrlInput, UpdateSourceTrigger=PropertyChanged}" />
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button Content="{loc:Tr '지금 주소 읽기'}" Command="{Binding ReadRemoteUrlCommand}"
+                                    Margin="0,0,6,4" />
+                            <Button Content="{loc:Tr '이 주소로 바꾸기'}" Command="{Binding SetRemoteUrlCommand}"
+                                    Margin="0,0,6,4" />
+                            <Button Content="{loc:Tr 'Pull Request 만들기'}" Command="{Binding OpenPullRequestCommand}"
+                                    Style="{StaticResource PrimaryButton}" Margin="0,0,0,4" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

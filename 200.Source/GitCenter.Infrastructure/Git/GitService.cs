@@ -71,6 +71,10 @@ public sealed class GitService(IGitRunner runner) : IGitService
             }
         }
 
+        // 왜: 원격 없는 로컬 전용 저장소를 「Push 전」으로 세지 않으려면 여기서 한 번 읽어야 한다 — RepoHealth.NoRemote 는 아무도 매기지 않는다
+        var remotes = await _runner.RunAsync(repo.Path, ["remote"], cancellationToken, 20).ConfigureAwait(false);
+        status.HasRemote = !remotes.Ok || remotes.StdOut.Trim().Length > 0;
+
         var gitDir = await ResolveGitDirAsync(repo, cancellationToken).ConfigureAwait(false);
         status.Operation = DetectOperation(gitDir);
         status.FetchedAtUtc = ReadFetchTimeUtc(gitDir);

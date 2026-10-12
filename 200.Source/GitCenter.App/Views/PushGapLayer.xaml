@@ -44,14 +44,16 @@
                                Text="{loc:Tr '충돌이 난 저장소는 올리지 않았습니다. 줄을 눌러 「충돌」 탭에서 풀고 「병합 마무리」 뒤 다시 Push 해 주십시오.'}" />
                 </StackPanel>
 
+                <!-- 계약: 단추는 오른쪽에 모은다 - 으뜸 단추는 「이 저장소만 고르기」(띠의 「커밋 + Push」와 같은 색)이고 「닫기」는 보통 단추다 -->
                 <Grid DockPanel.Dock="Bottom" Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <!-- 계약: 받아야 올릴 수 있는 저장소를 여기서 바로 푼다 - 원격의 같은 브랜치를 Merge 한 뒤 이어서 Push 한다(force 없음) -->
-                    <Button HorizontalAlignment="Left" Command="{Binding SyncPushGapCommand}"
+                    <Button Grid.Column="1" Command="{Binding SyncPushGapCommand}"
                             Visibility="{Binding PushGapCanSync, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="{loc:Tr '저장소마다 지금 브랜치가 올라가는 곳(예: origin/main)을 받아 Merge 한 뒤 이어서 Push 합니다 — 충돌하면 그 저장소는 올리지 않고 따로 알려 줍니다'}">
                         <StackPanel Orientation="Horizontal">
@@ -59,9 +61,10 @@
                             <TextBlock Text="{loc:Tr '받아서 Merge + Push'}" FontWeight="SemiBold" />
                         </StackPanel>
                     </Button>
-                    <Button Grid.Column="1" Content="{loc:Tr '이 저장소만 고르기'}" Command="{Binding SelectPushGapCommand}"
-                            Visibility="{Binding PushGapRows.Count, Converter={StaticResource CountToVisibility}}" />
                     <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" Margin="6,0,0,0"
+                            Content="{loc:Tr '이 저장소만 고르기'}" Command="{Binding SelectPushGapCommand}"
+                            Visibility="{Binding PushGapRows.Count, Converter={StaticResource CountToVisibility}}" />
+                    <Button Grid.Column="3" Margin="6,0,0,0"
                             Content="{loc:Tr '닫기'}" Command="{Binding ClosePushGapCommand}" IsCancel="True" />
                 </Grid>
 

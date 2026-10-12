@@ -22,6 +22,10 @@
 
 - ⛔ **되돌릴 수 없는 git 명령을 넣지 않는다** — `push --force`(및 `--force-with-lease`) · `reset --hard` · `clean` · `branch -D`.
   이 앱의 약속이고 설정으로도 열지 않는다. push 가 거부되면 「먼저 받아서 합쳐 주십시오」로 끝낸다.
+  계약: 일괄 작업이 충돌·실패로 끝난 저장소는 목록 체크를 자동으로 푼다(`MainViewModel.UncheckStuck`) — 「이 저장소만 고르기」가 다시 체크한다.
+  함정: `RepoHealth.NoRemote` 는 아무도 매기지 않는다 — 원격 없는 저장소의 「Push 전」 제외는 `RepoStatus.HasRemote`(`git remote` 한 번)가 한다.
+  계약: 「오류 보고」(상태 줄 · 시스템 작업 로그 탭)는 실패 기록 + 환경·설정 + 이벤트 로그를 복사하고 이슈 양식을 연다 — Git Center 구역은
+  `Services/GitCenterDiagnostics` 하나이고 설정 창 「진단 보고서」도 같은 것을 쓴다. 저장소 경로·원격 주소는 `MaskRepo` 로 가린다.
 - 계약: **원격에 닿는 일은 사용자가 단추를 눌렀을 때만** 일어난다. 상태 읽기(`status`·`log`·`for-each-ref`)는 로컬만 본다.
   자동 Fetch 는 설정에서 켠 사람만 쓰고 기본은 0(꺼짐)이다.
 - 함정: git 인자는 **배열로** 넘긴다(`IGitRunner.RunAsync`). 한 문자열로 이어 붙이면 공백 있는 경로·커밋 메시지가 잘린다.
@@ -49,7 +53,10 @@
   계약: 창 머리 「앱 공유하기」의 「배포하기」는 Core 의 `AppDeploy` 를 물린 것이다 — 개발 장비 + 저장소 소유자 계정일 때만 보이고,
   `JHJ_DEV\800.Deploy\deploy-history.jsonl` 에 시작 기록을 쓴 뒤에만 `release.ps1` 콘솔을 연다(030 규격 §1-1). 판정·이력을 여기서 다시 짜지 않는다.
   계약: 「앱 공유하기」 셋(winget 명령 · 설치 파일 주소 · 내려받기)의 좌표는 `Services/AppUpdate.cs` 다 — `SetupAssetName` 은 `publish.ps1` 의 `$SetupAsset`,
-  `WingetId` 는 `winget-manifest.ps1` 의 `$id` 와 같아야 한다. 설치 파일은 앱 exe 그대로이고 `--silent` 를 주면 묻지 않고 설치한다(`App.ConfirmInstall`).
+  `WingetId` 는 `winget-manifest.ps1` 의 `$id` 와 같아야 한다.
+  ★ 계약: **설치 파일(`JHJ_Git-Center_Setup.exe`)은 진짜 설치 관리자다** — `200.Source/GitCenter.Setup`(net48 · `Jhj.Core.Setup` 소스 링크)이고 `publish.ps1` 이 업데이트 꾸러미 zip 을 품겨 빌드한다(`-p:PackageZip`). 같은 내용이 `…_Setup_<버전>.exe` 로도 나간다. ⛔ 앱 exe 를 이름만 바꿔 설치 파일로 내지 않는다(규격 `JHJ_CS_CORE/300.Docs/040`).
+  계약: 받은 앱 exe(`JHJ_Git-Center_<버전>_win-x64.exe`)를 직접 돌리면 Core `SelfInstaller` 가 묻고 설치한다 — `--silent` 면 묻지 않는다(`App.ConfirmInstall`). 어느 길이든 설치 폴더에는 `JHJ_Git-Center.exe` 하나다.
+  함정: `Start-Process <설치 파일> -Wait` 는 설치 파일이 띄운 앱까지 기다려 끝나지 않는다 — 시험 스크립트에서는 `--no-launch` 를 주거나 `-Wait` 를 빼고 폴링한다.
   함정: winget 명령은 `microsoft/winget-pkgs` 가 매니페스트를 받아들인 뒤에만 된다 — 스크립트로 매니페스트를 쓰는 것만으로는 안 된다.
 - 계약: 설정 창의 고르는 상자는 **내부 키를 그대로 보이지 않는다** — `ThemeLabel`·`PaletteLabel`·`LanguageLabel`·`ScaleLabel` 컨버터를 거친다.
 - 계약: 명암·색·배율·언어는 **고르는 즉시** 비친다(`SettingsViewModel` 의 감싼 속성). 「적용」은 저장이다.
@@ -157,7 +164,7 @@
   계약: 「되돌리기」·「고치기」는 HEAD 가 어느 원격 추적 ref 에도 없을 때만 돈다(`HeadIsLocalOnlyAsync`) — 올린 커밋은 Revert 로만 뒤집는다.
   함정: 이 탭은 `IGitService` 를 거치지 않고 `_gitRunner` 로 git 을 바로 부른다 — 일괄 작업과 겹치지 않게 `IsBusy` 를 함께 쥔다.
 - 계약: 줄마다 `RefreshedAt` 을 찍는다 — 「상태 새로 고침」이 값을, 1분 타이머가 경과 글자(`TouchElapsed`)를 다시 그린다.
-- 계약: 기본 아이콘(`Resources/app-icon.ico`)은 **금박 JG** 다 — 모든 크기에 두 글자이고 밝은 금만 쓴다(`make_jhj_icon.py branch … --palette violet --style foil --mono JG`). 설정 「아이콘」의 선택지는 `Services/IconPresets.cs` 이고 옛 기본 그림은 「JHJ + 가지」(`app-icon-classic.ico`)로 남겼다.
+- 계약: 기본 아이콘(`Resources/app-icon.ico`)은 **검은 보라 바탕의 금속 JG 모노그램**이다(`make_jhj_icon.py branch … --style lux --mono JGm --bg obsidian` · 2026-10-12 사용자 선택). 설정 「아이콘」의 선택지(`Services/IconPresets.cs`)는 금속 JG 검은 보라 · 금속 JG 보라 · 금속 J · 「JHJ + 가지」(옛 기본, `app-icon-classic.ico`) · 가지 모양 · 연결 · 그물이다. 더하려면 `.ico` 생성 → csproj `Resource` → `IconPresets.All` → 문구 두 파일 순서다.
 - ★ 함정: 아이콘 `.ico` 는 **128 이하를 BMP 로** 적어야 한다 — Pillow 12 의 ICO 저장은 전부 PNG 로 눌러 담고,
   Windows 의 작은 아이콘 경로(작업 표시줄·Alt+Tab)가 그것을 못 읽어 기본 아이콘이 뜬다.
   생성기 `JHJ_DEV/000.AGENTS_MD/070.아이콘/make_jhj_icon.py` 의 `write_ico()` 가 맡는다(2026-10-10 수정).

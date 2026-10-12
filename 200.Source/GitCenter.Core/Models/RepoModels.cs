@@ -63,6 +63,9 @@ public sealed class RepoStatus
 
     public string? Upstream { get; set; }
 
+    /// 계약: 원격이 하나라도 등록돼 있나 — false 면 올릴 곳이 없어 「Push 전」으로 세지 않는다
+    public bool HasRemote { get; set; } = true;
+
     /// 계약: upstream 기준 — upstream 이 없으면 둘 다 0 이다
     public int Ahead { get; set; }
 

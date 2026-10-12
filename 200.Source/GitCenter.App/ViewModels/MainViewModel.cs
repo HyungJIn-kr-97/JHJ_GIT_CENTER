@@ -1129,6 +1129,28 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Activity.Clear();
         RepoActivity.Clear();
+        RefreshReportable();
+    }
+
+    /// 계약: 충돌·실패로 끝난 저장소는 체크를 푼다 — 다음 일괄 작업이 같은 데서 또 막히지 않게 한다. 「이 저장소만 고르기」가 다시 체크한다
+    private void UncheckStuck(IReadOnlyList<RepoRow> targets, IReadOnlyList<BulkStepResult> results)
+    {
+        var stuck = results.Where(r => r.Outcome is StepOutcome.Conflict or StepOutcome.Failed)
+            .Select(r => r.RepoId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (stuck.Count == 0)
+        {
+            return;
+        }
+
+        _bulkSelecting = true;
+        foreach (var row in targets.Where(r => stuck.Contains(r.Id)))
+        {
+            row.IsSelected = false;
+        }
+
+        _bulkSelecting = false;
+        SyncGroupSelection();
+        AddActivity("일괄", StepOutcome.Skipped, $"충돌·실패한 저장소 {stuck.Count}개의 체크를 풀었습니다 — 풀고 나서 다시 체크해 주십시오.");
     }
 
     /// 계약: only 를 주면 그 저장소에만, 안 주면 보이는 줄 중 고른 것에 돈다 — 시작하지 못했으면 null 을 준다
@@ -1234,6 +1256,7 @@ public sealed partial class MainViewModel : ObservableObject
             AddActivity(Describe(kind),
                 failed > 0 ? StepOutcome.Failed : conflict > 0 ? StepOutcome.Conflict : StepOutcome.Success,
                 $"끝 — 성공 {ok} · 충돌 {conflict} · 실패 {failed} · 건너뜀 {results.Count - ok - conflict - failed}");
+            UncheckStuck(targets, results);
         }
         catch (Exception ex)
         {
@@ -1371,6 +1394,10 @@ public sealed partial class MainViewModel : ObservableObject
         LastActivity = entry;
         Activity.Insert(0, entry);
         TrimActivity();
+        if (entry.Outcome is StepOutcome.Failed)
+        {
+            HasReportableError = true;
+        }
 
         if (SelectedRow is { } row && entry.Belongs(row.Id))
         {

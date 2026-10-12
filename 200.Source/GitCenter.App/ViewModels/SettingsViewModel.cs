@@ -99,17 +99,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         Settings.ExtraHotkeys = [.. texts.Skip(1)];
     }
 
-    // 계약: 저장소 경로·원격 주소·작성자는 싣지 않는다 — 사용자가 이슈에 그대로 붙이므로 개수와 설정값만 낸다
+    // 계약: Git Center 구역은 Services/GitCenterDiagnostics 가 갖는다 — 상태 줄 「오류 보고」와 같은 것을 쓴다
     private string BuildDiagnostics() => new DiagnosticsReportBuilder()
-        .Section("Git Center", sb =>
-        {
-            sb.AppendLine($"- 목록 출처: 루트 {Settings.ScanRoots.Count} · 수동 {Settings.ManualPaths.Count} · 숨김 {Settings.ExcludedIds.Count} · gh 계정 {Settings.GitHubOwners.Count} · 명령 {Settings.CommandSources.Count}");
-            sb.AppendLine($"- 연동: GitHub Desktop {Settings.GitHubDesktopEnabled} · gh 계정 {Settings.GitHubAccountEnabled}");
-            sb.AppendLine($"- 주기(분): 다시 훑기 {Settings.RescanMinutes} · 상태 {Settings.StatusRefreshMinutes} · 자동 Fetch {Settings.AutoFetchMinutes}");
-            sb.AppendLine($"- git: 동시 실행 {Settings.Concurrency} · 제한 시간 {Settings.GitTimeoutSeconds}초 · ff-only {Settings.FastForwardOnly} · stash {Settings.AutoStashBeforePull}");
-            sb.AppendLine($"- 화면: 명암 {Settings.Theme} · 색 {Settings.Palette} · 언어 {Settings.Language} · 배율 {Settings.UiScale}");
-            sb.AppendLine($"- 단축키: {string.Join(" · ", Hotkeys.Slots.Select(r => r.SettledText))}");
-        })
+        .AppSection(Settings, Hotkeys.Slots.Select(r => r.SettledText))
         .EventLog()
         .Build();
 

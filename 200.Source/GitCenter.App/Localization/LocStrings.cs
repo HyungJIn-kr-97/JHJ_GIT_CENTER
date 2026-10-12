@@ -93,6 +93,9 @@ internal static class LocStrings
         ["커밋은 됐지만 아직 Push 되지 않은 저장소를 저장소별로 보여 줍니다"] = "Shows, per repository, what is committed but not pushed yet",
         ["변경 {0}"] = "{0} changed",
         ["{0} 를 올린 적 없음"] = "{0} never pushed",
+        ["원격 없음 — 올릴 곳이 없습니다"] = "No remote — nowhere to push",
+        ["오류 보고"] = "Report error",
+        ["실패한 작업 기록 · 환경 · 설정 · 이벤트 로그를 한 벌로 복사하고 이슈 양식을 엽니다 — 저장소 경로와 원격 주소는 가립니다"] = "Copies the failed-step log, environment, settings and event log, then opens the issue form — repository paths and remote URLs are masked",
         ["{0} 로 Push 전 {1}"] = "{1} not pushed to {0}",
         ["아직 원격에 없는 커밋입니다 — Push 하면 사라집니다"] = "This commit is not on the remote yet — it clears once pushed",
         ["커밋이 없습니다."] = "No commits.",
@@ -389,8 +392,10 @@ internal static class LocStrings
 
         // 트레이 · 아이콘 고르개 · 풍선 도움말
         ["창 열기"] = "Open window",
-        ["기본 (금박 JG)"] = "Default (gold JG)",
-        ["금박 J"] = "Gold J",
+        ["기본 (금속 JG 모노그램)"] = "Default (metallic JG monogram)",
+        ["금속 JG · 검은 보라"] = "Metallic JG · obsidian",
+        ["금속 JG · 보라"] = "Metallic JG · violet",
+        ["금속 J · 검은 보라"] = "Metallic J · obsidian",
         ["JHJ + 가지"] = "JHJ + branch",
         ["불러온 그림"] = "Imported image",
         ["왼쪽 조건 거르개 단을 접고 폅니다"] = "Collapses or expands the filter pane on the left",

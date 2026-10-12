@@ -53,7 +53,9 @@
     <!-- 계약: exe 아이콘(ApplicationIcon)과 별개로 WPF 리소스로도 넣어야 트레이가 pack URI 로 읽는다 -->
     <Resource Include="Resources\app-icon.ico" />
     <Resource Include="Resources\app-icon-glyph.ico" />
-    <Resource Include="Resources\app-icon-gold-j.ico" />
+    <Resource Include="Resources\app-icon-lux-jg.ico" />
+    <Resource Include="Resources\app-icon-lux-jg-violet.ico" />
+    <Resource Include="Resources\app-icon-lux-j.ico" />
     <Resource Include="Resources\app-icon-classic.ico" />
   </ItemGroup>
 

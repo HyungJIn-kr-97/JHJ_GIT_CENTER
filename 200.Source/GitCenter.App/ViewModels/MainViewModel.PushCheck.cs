@@ -77,8 +77,9 @@ public sealed partial class MainViewModel
     public int PushGapCount => _all.Count(IsPushGap);
 
     // 왜: 원격이 없는 로컬 전용 저장소는 올릴 곳이 없다 — 「Push 전」으로 세지 않는다
+    // 함정: RepoHealth.NoRemote 는 아무도 매기지 않는다 — 판정은 Status.HasRemote 가 한다
     private static bool IsPushGap(RepoRow row) =>
-        row.Status is { IsDetached: false } status && row.Entry.Health is not RepoHealth.NoRemote
+        row.Status is { IsDetached: false, HasRemote: true } status && row.Entry.Health is not RepoHealth.NoRemote
         && (status.Ahead > 0 || status.Upstream is null);
 
     internal static string PushStateText(RepoRow row)
@@ -92,7 +93,8 @@ public sealed partial class MainViewModel
         return string.Join(" · ", new[]
         {
             changed > 0 ? Loc.T("변경 {0}", changed) : null,
-            status.Upstream is null ? Loc.T("{0} 를 올린 적 없음", status.Branch)
+            status.Upstream is null
+                ? status.HasRemote ? Loc.T("{0} 를 올린 적 없음", status.Branch) : Loc.T("원격 없음 — 올릴 곳이 없습니다")
                 : status.Ahead > 0 ? Loc.T("{0} 로 Push 전 {1}", status.Upstream, status.Ahead) : null
         }.Where(t => t is not null));
     }

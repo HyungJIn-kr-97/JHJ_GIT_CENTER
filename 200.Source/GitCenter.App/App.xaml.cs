@@ -303,12 +303,16 @@ public partial class App : System.Windows.Application
         {
             Log.Error(args.Exception, "처리되지 않은 UI 예외");
             args.Handled = true;
+            OfferErrorReport("UI 예외", args.Exception);
         };
 
+        // 계약: 작업 예외는 창을 띄우지 않고 실패 기록만 남긴다 — 상태 줄의 「오류 보고」가 보이게 된다
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {
             Log.Error(args.Exception, "관찰되지 않은 작업 예외");
             args.SetObserved();
+            var ex = args.Exception.Flatten().InnerExceptions.FirstOrDefault() ?? args.Exception;
+            Dispatcher.BeginInvoke(() => _host?.Services.GetService<MainViewModel>()?.RecordException("작업 예외", ex));
         };
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
@@ -319,5 +323,42 @@ public partial class App : System.Windows.Application
                 Log.CloseAndFlush();
             }
         };
+    }
+
+    private bool _offeringReport;
+
+    /// <summary>예외 창 — 실패 기록으로 남기고 「오류 보고」(실패 기록 + 환경·설정 + 이벤트 로그 복사, 이슈 양식 열기)를 그 자리에서 권한다.</summary>
+    /// 함정: 같은 예외가 연달아 나면 창이 쌓인다 — 하나가 떠 있는 동안은 기록만 남긴다
+    private void OfferErrorReport(string scope, Exception ex)
+    {
+        var main = _host?.Services.GetService<MainViewModel>();
+        main?.RecordException(scope, ex);
+        if (_offeringReport)
+        {
+            return;
+        }
+
+        _offeringReport = true;
+        try
+        {
+            var head = $"처리되지 않은 오류가 났습니다.\n\n{ex.GetType().Name}: {ex.Message}";
+            if (main is null)
+            {
+                System.Windows.MessageBox.Show(head, "JHJ Git Center", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            var answer = System.Windows.MessageBox.Show(
+                $"{head}\n\n오류 기록과 환경·설정·이벤트 로그를 복사하고 이슈 양식을 열까요?\n(저장소 경로와 원격 주소는 가립니다. 나중에는 상태 줄의 「오류 보고」로도 할 수 있습니다.)",
+                "JHJ Git Center", MessageBoxButton.YesNo, MessageBoxImage.Error);
+            if (answer == MessageBoxResult.Yes)
+            {
+                main.ReportErrorCommand.Execute(null);
+            }
+        }
+        finally
+        {
+            _offeringReport = false;
+        }
     }
 }

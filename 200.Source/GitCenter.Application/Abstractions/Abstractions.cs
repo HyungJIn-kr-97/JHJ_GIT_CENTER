@@ -87,6 +87,12 @@ public interface IGitService
     /// 계약: reference 의 커밋 중 어느 원격 추적 ref 에도 없는 것(아직 Push 안 한 것)의 sha 다 — 로컬이 아는 ref 로만 가른다
     Task<IReadOnlySet<string>> ReadUnpushedAsync(RepoEntry repo, string reference, int max, CancellationToken cancellationToken);
 
+    /// 계약: 커밋 하나가 바꾼 파일과 줄 수다 — 병합 커밋은 첫 부모와 견준다. 읽기뿐이다
+    Task<IReadOnlyList<CommitFile>> ReadCommitFilesAsync(RepoEntry repo, string sha, CancellationToken cancellationToken);
+
+    /// 계약: 그 커밋이 한 파일에 낸 변경 내용이다 — 읽기뿐이라 작업 트리를 건드리지 않는다
+    Task<FileDiff> ReadCommitDiffAsync(RepoEntry repo, CommitFile file, CancellationToken cancellationToken);
+
     /// 계약: 그 브랜치로 체크아웃을 바꾼다 — 원격 브랜치면 같은 이름의 로컬로(없으면 추적 브랜치를 만들어) 옮긴다. 강제 옵션은 없다
     Task<(bool Ok, string Message)> SwitchBranchAsync(RepoEntry repo, BranchInfo branch, CancellationToken cancellationToken);
 

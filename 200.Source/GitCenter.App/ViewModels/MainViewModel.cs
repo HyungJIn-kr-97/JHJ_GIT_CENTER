@@ -398,13 +398,20 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         // 왜: 파일을 누른 사람은 그 내용을 보려는 것이다 — 탭을 찾아 누르게 두지 않는다
+        SelectedCommitFile = null;
         RightTabIndex = 0;
         IsRightPanelOpen = true;
+        IsDiffShown = true;
         _ = LoadDiffAsync(SelectedRow, value);
     }
 
+    /// 계약: 「변경 내용」 탭에 보일 파일이 있는가 — 변경 파일이든 브랜치 이력의 커밋 파일이든 같은 자리에 그린다
+    [ObservableProperty]
+    private bool _isDiffShown;
+
     private void ClearDiff()
     {
+        IsDiffShown = false;
         _diffGeneration++;
         DiffLines.Clear();
         DiffTitle = string.Empty;
@@ -1134,6 +1141,9 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private Task SwitchToWorkAsync() => RunBulkAsync(BulkOperationKind.SwitchToWorkBranch);
 
+    /// 계약: 화면(MainWindow.Repos.cs)이 먼저 묻고 부른다 — 되돌림 커밋이 원격에 올라가므로 단추 한 번에 돌지 않는다
+    public Task UndoPushAsync() => RunBulkAsync(BulkOperationKind.UndoPush);
+
     [RelayCommand]
     private void Cancel() => _work?.Cancel();
 
@@ -1511,6 +1521,7 @@ public sealed partial class MainViewModel : ObservableObject
         BulkOperationKind.CommitAll => "커밋",
         BulkOperationKind.Push => "올리기",
         BulkOperationKind.CommitAndPush => "커밋 + 올리기",
+        BulkOperationKind.UndoPush => "Push 취소",
         _ => "병합 되돌리기"
     };
 

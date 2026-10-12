@@ -29,6 +29,7 @@
   계약: Fetch·Pull·Merge 의 git fatal 원문 셋(원격 없음·주소 틀림 · 접속 실패 · 인증 실패)은 `GitService.DescribeFailure` 가 우리말로 바꾼다 — 원문은 `Detail`(「자세히」)이 갖는다.
   ★ 계약: GitHub 계정은 **gh CLI 의 로그인**이다(`Services/GitHubAccount`) — 토큰을 이 앱이 쥐지 않고, 제목 띠의 계정 칩(`AccountButton`)과 설정 「일반」 탭이 같은 객체를 본다.
   로그인은 `gh auth login --web` 콘솔을 띄워 사람이 하고(JHJ 규약 §4), 시작 때는 Core `AppDeploy.GhAccount`(hosts.yml)만 읽고 누를 때 `gh api user` 로 확인한다. gh 가 없으면 칩이 「gh 없음」이 되고 설치 안내를 낸다.
+  TODO: 워크스페이스 `JHJ\AGENTS.md` §4 「계정 정보는 세 출처」에 맞춰 GitHub Desktop · 브라우저 로그인도 읽는다 — 지금은 gh 하나라 gh 가 없으면 다른 곳에 로그인해 있어도 못 찾는다.
   ★ 계약: 「GitHub 에 올리기」(`Views/PublishLayer` · `MainViewModel.Publish.cs`)는 원격이 없는 저장소(`RepoRow.IsLocalOnly`)에만 보이고, `gh repo create --source --remote --push` 한 번으로 **만들기 + 연결 + 첫 Push** 를 한다 — 기본은 비공개(끄면 공개).
   커밋이 없거나 원격이 이미 있으면 gh 를 부르기 전에 막는다. 여는 곳은 셋 — 저장소 줄 단추 · 상세 「작업」 탭 「GitHub 에 새 저장소 만들어 연결」 · 일괄 작업 「원격 없음」 건너뜀의 Nudge.
   계약: 「오류 보고」(상태 줄 · 시스템 작업 로그 탭)는 실패 기록 + 환경·설정 + 이벤트 로그를 복사하고 이슈 양식을 연다 — Git Center 구역은
@@ -88,6 +89,9 @@
   계약: 「병합」은 git 을 부르기 전에 커밋하지 않은 변경과 들어올 파일(`HEAD...<ref>`)이 겹치는지 본다(`GitService.OverlapWithIncomingAsync`) — 겹치면 실패로 끝내고 겹친 파일을 `Detail` 에 싣는다.
   계약: 가운데 상세 단은 탭 다섯이다 — 「변경 파일」·「브랜치」·「충돌」·「상태」·「작업」.
   계약: 「브랜치」 탭은 왼쪽 브랜치 목록 + 오른쪽 이력(최근 200건 · `MainViewModel.BranchLog.cs`)이다 — 원격에 없는 커밋에 「Push 전」을 달고, 판정은 로컬이 아는 원격 추적 ref 뿐이다.
+  계약: 이력의 커밋을 누르면 그 아래에 그 커밋이 바꾼 파일이 뜨고(`ReadCommitFilesAsync` · 병합 커밋은 첫 부모 기준), 파일을 누르면 오른쪽 「변경 내용」에 그 코드가 보인다 — 「변경 내용」의 표시는 `IsDiffShown` 하나가 정하고 변경 파일·커밋 파일 선택은 서로를 푼다.
+  ★ 계약: 띠 넷째 묶음의 「Push 취소」(`BulkOperationKind.UndoPush` · `GitService.UndoPushAsync`)는 **올리기 전 내용으로 되돌리는 커밋을 하나 더해 보통 Push 로 올린다** — force push·reset 이 아니라서 올렸던 커밋은 이력에 남는다. 화면이 먼저 묻는다(`OnUndoPushClick`).
+  계약: 되돌릴 Push 는 원격 추적 ref 의 reflog 맨 위가 `update by push` 이고 HEAD 가 그때 올린 커밋 그대로일 때만이다 — Push 뒤 커밋이 더 생겼거나, 그 Push 가 원격 브랜치를 처음 만들었거나, 업로드 브랜치의 올리기 전 내용이 작업 브랜치와 달랐으면 건너뛴다.
   계약: 브랜치를 두 번 누르면 화면이 먼저 묻고 Switch 한다(`MainWindow.Repos.cs` → `SwitchBranchAsync`) — 강제 옵션이 없어 겹치는 변경이 있으면 git 이 거부한다.
   계약: 이 단은 **접힌 채(손잡이만)로 시작한다** — `MainViewModel.IsRightPanelOpen` 이 펴고, 변경 파일을 누르면 저절로 펴진다.
   설정 「작업 로그 단」을 끄면 손잡이까지 숨는다(`MainWindow.ApplyDisplaySettings`).

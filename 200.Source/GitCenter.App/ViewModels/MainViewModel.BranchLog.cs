@@ -36,6 +36,122 @@ public sealed partial class MainViewModel
 
     partial void OnSelectedBranchChanged(BranchInfo? value) => _ = LoadBranchLogAsync(SelectedRow, value);
 
+    // ── 이력의 커밋 → 그 커밋이 바꾼 파일 → 「변경 내용」 ──────────
+
+    private int _commitFilesGeneration;
+
+    public ObservableCollection<CommitFile> CommitFiles { get; } = [];
+
+    [ObservableProperty]
+    private BranchCommitRow? _selectedBranchCommit;
+
+    [ObservableProperty]
+    private CommitFile? _selectedCommitFile;
+
+    [ObservableProperty]
+    private string _commitFilesCaption = string.Empty;
+
+    partial void OnSelectedBranchCommitChanged(BranchCommitRow? value) => _ = LoadCommitFilesAsync(SelectedRow, value);
+
+    partial void OnSelectedCommitFileChanged(CommitFile? value)
+    {
+        if (value is null)
+        {
+            // 함정: 변경 파일을 고르면 이쪽 선택이 풀린다 — 그때 지우면 방금 띄운 변경 내용이 사라진다
+            if (SelectedChange is null)
+            {
+                ClearDiff();
+            }
+
+            return;
+        }
+
+        SelectedChange = null;
+        RightTabIndex = 0;
+        IsRightPanelOpen = true;
+        IsDiffShown = true;
+        _ = LoadCommitDiffAsync(SelectedRow, value);
+    }
+
+    private async Task LoadCommitFilesAsync(RepoRow? row, BranchCommitRow? commit)
+    {
+        var generation = ++_commitFilesGeneration;
+        CommitFiles.Clear();
+        CommitFilesCaption = string.Empty;
+        if (row is null || commit is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var files = await _git.ReadCommitFilesAsync(row.Entry, commit.Commit.Sha, CancellationToken.None).ConfigureAwait(true);
+            if (generation != _commitFilesGeneration)
+            {
+                return;
+            }
+
+            foreach (var file in files)
+            {
+                CommitFiles.Add(file);
+            }
+
+            CommitFilesCaption = files.Count == 0
+                ? Loc.T("{0} · 바뀐 파일이 없습니다.", commit.ShortSha)
+                : Loc.T("{0} · 바뀐 파일 {1}개 — 누르면 오른쪽 「변경 내용」에 보입니다", commit.ShortSha, files.Count);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "커밋 파일 읽기 실패 {Repo} {Sha}", row.Name, commit.ShortSha);
+        }
+    }
+
+    private async Task LoadCommitDiffAsync(RepoRow? row, CommitFile file)
+    {
+        var generation = ++_diffGeneration;
+        DiffLines.Clear();
+        DiffTitle = $"{file.Path} @ {(file.Sha.Length >= 7 ? file.Sha[..7] : file.Sha)}";
+        DiffSummary = string.Empty;
+        DiffNote = null;
+        if (row is null)
+        {
+            return;
+        }
+
+        IsDiffLoading = true;
+        try
+        {
+            var diff = await _git.ReadCommitDiffAsync(row.Entry, file, CancellationToken.None).ConfigureAwait(true);
+            if (generation != _diffGeneration)
+            {
+                return;
+            }
+
+            foreach (var line in diff.Lines)
+            {
+                DiffLines.Add(line);
+            }
+
+            DiffSummary = diff.Lines.Count == 0 ? string.Empty : $"+{diff.Added} · -{diff.Removed}";
+            DiffNote = diff.Note;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "커밋 변경 내용 읽기 실패 {Path}", file.Path);
+            if (generation == _diffGeneration)
+            {
+                DiffNote = ex.Message;
+            }
+        }
+        finally
+        {
+            if (generation == _diffGeneration)
+            {
+                IsDiffLoading = false;
+            }
+        }
+    }
+
     private async Task LoadBranchLogAsync(RepoRow? row, BranchInfo? branch)
     {
         // 함정: 브랜치를 빠르게 바꾸면 늦게 온 이력이 덮는다 — 세대 번호로 늦은 쪽을 버린다

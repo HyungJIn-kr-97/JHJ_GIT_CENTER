@@ -226,6 +226,62 @@ public sealed class GitService(IGitRunner runner) : IGitService
             : new HashSet<string>(StringComparer.Ordinal);
     }
 
+    // 함정: 병합 커밋은 show 가 합친 diff(대개 빈 결과)를 낸다 — --first-parent 로 첫 부모와 견준다
+    private static List<string> ShowArgs(string sha, string format) =>
+        ["show", "--first-parent", "--format=", "--no-color", "--no-renames", format, sha, "--"];
+
+    public async Task<IReadOnlyList<CommitFile>> ReadCommitFilesAsync(RepoEntry repo, string sha, CancellationToken cancellationToken)
+    {
+        var shown = await _runner.RunAsync(repo.Path, ShowArgs(sha, "--numstat"), cancellationToken, 60).ConfigureAwait(false);
+        var found = new List<CommitFile>();
+        if (!shown.Ok)
+        {
+            return found;
+        }
+
+        foreach (var line in shown.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            // 계약: numstat 한 줄은 「더한 줄<탭>지운 줄<탭>경로」 다 — 바이너리는 두 수가 「-」 다
+            var fields = line.TrimEnd('\r').Split('\t', 3);
+            if (fields.Length == 3)
+            {
+                found.Add(new CommitFile(sha, fields[2],
+                    int.TryParse(fields[0], out var added) ? added : null,
+                    int.TryParse(fields[1], out var removed) ? removed : null));
+            }
+        }
+
+        return found;
+    }
+
+    public async Task<FileDiff> ReadCommitDiffAsync(RepoEntry repo, CommitFile file, CancellationToken cancellationToken)
+    {
+        var diff = new FileDiff { Path = file.Path };
+        var args = ShowArgs(file.Sha, "--patch");
+        args.Add(file.Path);
+        var shown = await _runner.RunAsync(repo.Path, args, cancellationToken, 60).ConfigureAwait(false);
+        if (!shown.Ok)
+        {
+            diff.Note = shown.StdErr.Length > 0 ? shown.StdErr.Trim() : "변경 내용을 읽지 못했습니다.";
+            return diff;
+        }
+
+        if (shown.StdOut.Contains("Binary files ", StringComparison.Ordinal) || shown.StdOut.Contains("GIT binary patch", StringComparison.Ordinal))
+        {
+            diff.IsBinary = true;
+            diff.Note = "바이너리 파일이라 줄 단위로 견줄 수 없습니다.";
+            return diff;
+        }
+
+        ParseUnifiedDiff(shown.StdOut, diff);
+        if (diff.Lines.Count == 0)
+        {
+            diff.Note = "보여줄 변경 줄이 없습니다 — 이름만 바뀌었거나 권한만 달라진 파일일 수 있습니다.";
+        }
+
+        return diff;
+    }
+
     public async Task<(bool Ok, string Message)> SwitchBranchAsync(RepoEntry repo, BranchInfo branch, CancellationToken cancellationToken)
     {
         // 계약: 원격 브랜치 이름은 「<remote>/<브랜치>」 다 — 첫 빗금 뒤가 로컬 이름이다
@@ -937,6 +993,9 @@ public sealed class GitService(IGitRunner runner) : IGitService
                 case BulkOperationKind.SwitchToWorkBranch:
                     await SwitchToWorkBranchAsync(repo, options, step, cancellationToken).ConfigureAwait(false);
                     break;
+                case BulkOperationKind.UndoPush:
+                    await UndoPushAsync(repo, options, step, cancellationToken).ConfigureAwait(false);
+                    break;
             }
         }
         catch (OperationCanceledException)
@@ -1552,6 +1611,139 @@ public sealed class GitService(IGitRunner runner) : IGitService
             rejected ? BulkNextAction.Merge : string.Empty);
     }
 
+    /// 계약: Push 취소는 올리기 전 내용으로 되돌리는 커밋을 하나 더해 보통 Push 로 올린다 — force push 도 reset 도 쓰지 않아 올렸던 커밋은 이력에 남는다
+    /// 계약: 되돌릴 Push 는 원격 추적 ref 의 reflog 맨 위(「update by push」)로 가른다 — HEAD 가 그때 올린 커밋 그대로일 때만 한다
+    private async Task UndoPushAsync(RepoEntry repo, BulkOperationOptions options, BulkStepResult step, CancellationToken ct)
+    {
+        var branch = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(branch))
+        {
+            step.Outcome = StepOutcome.Skipped;
+            step.Message = "브랜치가 분리돼 있어 Push 를 되돌리지 않았습니다.";
+            return;
+        }
+
+        var head = await RevAsync(repo, "HEAD", ct).ConfigureAwait(false);
+        var (own, revert) = await UndoOwnPushAsync(repo, options, branch, head, ct).ConfigureAwait(false);
+        var parts = new List<PushPart> { own };
+
+        var upload = options.UploadBranchFor(repo);
+        if (upload.Length > 0 && !string.Equals(upload, branch, StringComparison.Ordinal))
+        {
+            parts.Add(await UndoUploadPushAsync(repo, options, upload, head, revert, ct).ConfigureAwait(false));
+        }
+
+        step.Outcome = parts.Any(p => p.Outcome == StepOutcome.Failed) ? StepOutcome.Failed
+            : parts.Any(p => p.Outcome == StepOutcome.Success) ? StepOutcome.Success
+            : StepOutcome.Skipped;
+        step.Message = string.Join(" · ", parts.Select(p => p.Message));
+        step.Detail = string.Join(Environment.NewLine, parts.Select(p => p.Detail).Where(d => d.Length > 0));
+        step.NextAction = parts.Select(p => p.NextAction).FirstOrDefault(a => a.Length > 0) ?? string.Empty;
+    }
+
+    /// <summary>되돌릴 Push 한 건 — Before 는 올리기 전, Pushed 는 올린 뒤의 원격 브랜치 커밋이다.</summary>
+    private readonly record struct PushedRange(string Before, string Pushed, string Why);
+
+    // 계약: 되돌릴 수 없으면 Why 에 까닭을 싣는다 — 읽기뿐이고 원격에 닿지 않는다
+    private async Task<PushedRange> ReadLastPushAsync(RepoEntry repo, string remote, string target, string head, CancellationToken ct)
+    {
+        var tracking = $"refs/remotes/{remote}/{target}";
+        var last = await _runner.RunAsync(repo.Path, ["reflog", "show", "-n", "1", "--format=%gs", tracking], ct, 20).ConfigureAwait(false);
+        if (!last.Ok || !last.StdOut.Trim().StartsWith("update by push", StringComparison.Ordinal))
+        {
+            return new PushedRange(string.Empty, string.Empty, $"{remote}/{target} 의 마지막 변경이 이 PC 의 Push 가 아니라 되돌릴 것이 없습니다.");
+        }
+
+        var pushed = await RevAsync(repo, tracking, ct).ConfigureAwait(false);
+        var before = await RevAsync(repo, $"{tracking}@{{1}}", ct).ConfigureAwait(false);
+        if (before.Length == 0)
+        {
+            return new PushedRange(string.Empty, pushed, $"그 Push 가 {remote}/{target} 을 처음 만든 것이라 되돌리지 않았습니다 — 원격 브랜치 지우기는 이 앱이 하지 않습니다.");
+        }
+
+        // 왜: Push 뒤에 커밋이 더 쌓였으면 올리기 전 내용으로 되돌릴 때 그 커밋까지 함께 사라진다
+        return string.Equals(pushed, head, StringComparison.Ordinal)
+            ? new PushedRange(before, pushed, string.Empty)
+            : new PushedRange(before, pushed, $"{remote}/{target} 에 올린 뒤로 커밋이 더 생겨 되돌리지 않았습니다 — 그 커밋은 「작업」 탭의 Revert 로 뒤집어 주십시오.");
+    }
+
+    // 계약: 되돌림 커밋은 올린 커밋 바로 위에 얹는다(commit-tree) — 빨리감기라 겹치는 변경이 있으면 git 이 거부하고 작업 트리는 그대로 남는다
+    private async Task<(PushPart Part, string Revert)> UndoOwnPushAsync(
+        RepoEntry repo, BulkOperationOptions options, string branch, string head, CancellationToken ct)
+    {
+        var remote = options.RemoteName;
+        var range = await ReadLastPushAsync(repo, remote, branch, head, ct).ConfigureAwait(false);
+        if (range.Why.Length > 0)
+        {
+            return (new PushPart(StepOutcome.Skipped, range.Why, string.Empty, string.Empty), string.Empty);
+        }
+
+        var beforeTree = await RevAsync(repo, $"{range.Before}^{{tree}}", ct).ConfigureAwait(false);
+        if (beforeTree == await RevAsync(repo, $"{range.Pushed}^{{tree}}", ct).ConfigureAwait(false))
+        {
+            return (new PushPart(StepOutcome.Skipped, $"{remote}/{branch} 은 올리기 전과 내용이 같아 되돌릴 것이 없습니다.", string.Empty, string.Empty), string.Empty);
+        }
+
+        var span = $"{Short(range.Before)}..{Short(range.Pushed)}";
+        var made = await _runner.RunAsync(repo.Path,
+            ["commit-tree", beforeTree, "-p", range.Pushed, "-m", $"Push 취소 — {branch} 를 {Short(range.Before)} 내용으로 되돌림 ({span})"], ct, 30).ConfigureAwait(false);
+        var revert = made.Ok ? made.StdOut.Trim() : string.Empty;
+        if (revert.Length == 0)
+        {
+            return (new PushPart(StepOutcome.Failed, FirstLine(made.Text), made.Text, string.Empty), string.Empty);
+        }
+
+        var moved = await _runner.RunAsync(repo.Path, ["merge", "--ff-only", revert], ct, 60).ConfigureAwait(false);
+        if (!moved.Ok)
+        {
+            return (new PushPart(StepOutcome.Failed,
+                "변경한 파일이 되돌릴 내용과 겹쳐 Push 를 되돌리지 못했습니다 — 먼저 커밋하거나 넣어 두고(stash) 다시 해 주십시오.",
+                moved.Text, string.Empty), string.Empty);
+        }
+
+        var pushed = await RunPushAsync(repo, options, ["push", remote, $"HEAD:refs/heads/{branch}"], branch,
+            $"{remote}/{branch} 의 마지막 Push({span})를 되돌리는 커밋을 올렸습니다.", ct).ConfigureAwait(false);
+        return (pushed, pushed.Outcome == StepOutcome.Failed ? string.Empty : revert);
+    }
+
+    // 계약: 업로드 브랜치는 같은 되돌림 커밋을 그대로 올린다 — 올리기 전 내용이 작업 브랜치와 달랐으면 갈라지므로 손대지 않는다
+    private async Task<PushPart> UndoUploadPushAsync(
+        RepoEntry repo, BulkOperationOptions options, string upload, string head, string revert, CancellationToken ct)
+    {
+        var remote = options.RemoteName;
+        var range = await ReadLastPushAsync(repo, remote, upload, head, ct).ConfigureAwait(false);
+        if (range.Why.Length > 0)
+        {
+            return new PushPart(StepOutcome.Skipped, range.Why, string.Empty, string.Empty);
+        }
+
+        if (revert.Length == 0)
+        {
+            return new PushPart(StepOutcome.Skipped, $"작업 브랜치 쪽을 되돌리지 못해 업로드 브랜치 {remote}/{upload} 은 그대로 두었습니다.", string.Empty, string.Empty);
+        }
+
+        if (await RevAsync(repo, $"{range.Before}^{{tree}}", ct).ConfigureAwait(false) != await RevAsync(repo, $"{revert}^{{tree}}", ct).ConfigureAwait(false))
+        {
+            return new PushPart(StepOutcome.Skipped,
+                $"업로드 브랜치 {remote}/{upload} 은 올리기 전 내용이 작업 브랜치와 달라 그대로 두었습니다 — 「작업」 탭의 Revert 로 뒤집어 주십시오.",
+                string.Empty, string.Empty);
+        }
+
+        var pushed = await RunPushAsync(repo, options, ["push", remote, $"{revert}:refs/heads/{upload}"], upload,
+            $"업로드 브랜치 {remote}/{upload} 의 마지막 Push 도 되돌렸습니다.", ct).ConfigureAwait(false);
+        return pushed.Outcome == StepOutcome.Failed
+            ? pushed
+            : await SyncLocalUploadAsync(repo, options, upload, pushed, ct).ConfigureAwait(false);
+    }
+
+    private async Task<string> RevAsync(RepoEntry repo, string reference, CancellationToken ct)
+    {
+        var result = await _runner.RunAsync(repo.Path, ["rev-parse", "--verify", "--quiet", reference], ct, 20).ConfigureAwait(false);
+        return result.Ok ? result.StdOut.Trim() : string.Empty;
+    }
+
+    private static string Short(string sha) => sha.Length >= 7 ? sha[..7] : sha;
+
     /// 계약: 있는 브랜치로만 옮긴다 — 로컬에 없으면 원격의 같은 이름을 추적하는 브랜치를 만들고, 둘 다 없으면 건너뛴다
     // 계약: 강제 옵션을 쓰지 않는다 — 덮어쓸 변경이 있거나 병합 중이면 git 이 거부하고 작업 트리는 그대로 남는다
     private async Task SwitchToWorkBranchAsync(RepoEntry repo, BulkOperationOptions options, BulkStepResult step, CancellationToken ct)
@@ -1860,7 +2052,8 @@ public sealed class GitService(IGitRunner runner) : IGitService
         or BulkOperationKind.MergeDefaultIntoCurrent
         or BulkOperationKind.PullCurrent
         or BulkOperationKind.UpdateAllTrackedBranches
-        or BulkOperationKind.Push;
+        or BulkOperationKind.Push
+        or BulkOperationKind.UndoPush;
 
     /// 계약: 커밋하지 않은 변경(추적 파일 + 추적 전 파일) 가운데 reference 에서 들어올 파일과 겹치는 것만 돌려준다 — 읽기만 한다
     // 함정: 이미 병합 중이면 묻지 않는다 — HEAD 와 견준 변경이 전부 병합분이라 통째로 겹친 것으로 보인다

@@ -128,6 +128,15 @@ public enum GitOperationState
 /// 계약: Day 는 커밋한 날(%cs)이다 — 커밋 캘린더가 세는 날과 같은 값이다
 public sealed record CommitInfo(string Sha, DateOnly Day, string Author, DateTimeOffset? When, string Subject);
 
+/// <summary>커밋 하나가 바꾼 파일 한 줄 — 「브랜치」 탭의 이력 아래 목록이 쓴다.</summary>
+/// 계약: Added·Removed 가 null 이면 바이너리라 줄을 세지 못한 것이다
+public sealed record CommitFile(string Sha, string Path, int? Added, int? Removed)
+{
+    public string AddedText => Added is { } added ? $"+{added}" : string.Empty;
+
+    public string RemovedText => Removed is { } removed ? $"-{removed}" : string.Empty;
+}
+
 /// <summary>stash 하나 — 「상태」 탭이 목록으로 보여준다.</summary>
 /// 계약: Ref 는 stash@{0} 꼴이고 Branch 는 stash 를 만든 때의 브랜치다(%gs 머리말에서 뗀다)
 public sealed record StashEntry(string Ref, string Sha, DateTimeOffset? When, string Branch, string Message, IReadOnlyList<string> Files);

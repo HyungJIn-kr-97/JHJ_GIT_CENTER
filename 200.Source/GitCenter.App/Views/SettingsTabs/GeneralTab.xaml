@@ -94,7 +94,8 @@
                 <StackPanel>
                     <TextBlock Text="업데이트" Style="{StaticResource SectionTitle}" />
                     <upd:UpdatePanel DataContext="{Binding Update}" ButtonStyle="{StaticResource GhostButton}"
-                                     MutedTextStyle="{StaticResource Caption}" LinkBrush="{DynamicResource AccentBrush}" />
+                                     MutedTextStyle="{StaticResource Caption}" LinkBrush="{DynamicResource AccentBrush}"
+                                     ButtonCornerRadius="{StaticResource RadiusSm}" />
                 </StackPanel>
             </Border>
 

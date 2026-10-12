@@ -1240,7 +1240,41 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-                                <ListBox Grid.Row="1" Grid.Column="2" ItemsSource="{Binding BranchCommits}"
+                                <!-- 계약: 이력의 커밋을 누르면 아래에 그 커밋이 바꾼 파일이 뜨고, 파일을 누르면 오른쪽 「변경 내용」에 그 코드가 보인다 -->
+                                <DockPanel Grid.Row="1" Grid.Column="2">
+                                <Grid DockPanel.Dock="Bottom" MaxHeight="230" Margin="0,8,0,0"
+                                      Visibility="{Binding SelectedBranchCommit, Converter={StaticResource NullToVisibility}}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="{Binding CommitFilesCaption}" Style="{StaticResource Micro}" Margin="2,0,0,6"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <ListBox x:Name="CommitFileList" Grid.Row="1" ItemsSource="{Binding CommitFiles}"
+                                             SelectedItem="{Binding SelectedCommitFile, Mode=TwoWay}"
+                                             ItemContainerStyle="{Binding Settings.CompactRows, Converter={StaticResource RowStyle}}">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Path}" Style="{StaticResource Mono}" VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" />
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,4,0">
+                                                        <TextBlock Text="{Binding AddedText}" Style="{StaticResource Mono}"
+                                                                   Foreground="{DynamicResource OkBrush}" />
+                                                        <TextBlock Text="{Binding RemovedText}" Style="{StaticResource Mono}" Margin="8,0,0,0"
+                                                                   Foreground="{DynamicResource DangerBrush}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                                <ListBox x:Name="BranchCommitList" ItemsSource="{Binding BranchCommits}"
+                                         SelectedItem="{Binding SelectedBranchCommit, Mode=TwoWay}"
                                          ItemContainerStyle="{Binding Settings.CompactRows, Converter={StaticResource RowStyle}}">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
@@ -1268,6 +1302,7 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
+                                </DockPanel>
                             </Grid>
                         </TabItem>
 
@@ -1548,7 +1583,7 @@
 
                             <!-- 아무 파일도 안 고른 상태 -->
                             <StackPanel Grid.RowSpan="2" VerticalAlignment="Center" Margin="8,0,12,24"
-                                        Visibility="{Binding SelectedChange, Converter={StaticResource NullToVisibility}, ConverterParameter=invert}">
+                                        Visibility="{Binding IsDiffShown, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}">
                                 <Path Data="{StaticResource IconCode}" Width="26" Height="26" Stretch="Uniform"
                                       Stroke="{DynamicResource TextFaintBrush}" StrokeThickness="1.5"
                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
@@ -1559,7 +1594,7 @@
                             </StackPanel>
 
                             <StackPanel Grid.Row="0" Margin="0,0,8,8"
-                                        Visibility="{Binding SelectedChange, Converter={StaticResource NullToVisibility}}">
+                                        Visibility="{Binding IsDiffShown, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="{Binding DiffTitle}" Style="{StaticResource Mono}" FontWeight="SemiBold"
                                            TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
@@ -1928,12 +1963,22 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" SharedSizeGroup="ActionRowTop" />
                                     <RowDefinition Height="5" />
                                     <RowDefinition Height="Auto" SharedSizeGroup="ActionRowBottom" />
                                 </Grid.RowDefinitions>
+                                <!-- 계약: Push 취소는 먼저 묻는다(MainWindow.Repos.cs) — 되돌림 커밋을 더해 올릴 뿐 force push 는 하지 않는다 -->
+                                <Button x:Name="UndoPushButton" Grid.Row="2" Grid.Column="4" Style="{StaticResource DangerButton}"
+                                        Click="OnUndoPushClick" Margin="5,0,0,0"
+                                        ToolTip="{loc:Tr '고른 저장소의 마지막 Push 를 되돌리는 커밋을 만들어 올립니다 — 올렸던 커밋은 이력에 남습니다'}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconUndo}" Margin="0,0,6,0" />
+                                        <TextBlock Text="{loc:Tr 'Push 취소'}" />
+                                    </StackPanel>
+                                </Button>
                                 <TextBlock Text="{loc:Tr '커밋 제목'}" Style="{StaticResource Micro}" Margin="0,0,8,0"
                                            VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1" Tag="{loc:Tr '커밋 첫 줄 — 고른 저장소에 모두 같은 제목으로 들어갑니다'}"

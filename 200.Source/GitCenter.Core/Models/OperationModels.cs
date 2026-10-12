@@ -31,7 +31,10 @@ public enum BulkOperationKind
     AbortOperation,
 
     /// 체크아웃을 작업 브랜치로 바꾼다 — 덮어쓸 변경이 있으면 git 이 거부하고 그대로 남는다
-    SwitchToWorkBranch
+    SwitchToWorkBranch,
+
+    /// 마지막 Push 를 되돌리는 커밋을 하나 더해 올린다 — force push 도 reset 도 쓰지 않는다
+    UndoPush
 }
 
 public enum StepOutcome

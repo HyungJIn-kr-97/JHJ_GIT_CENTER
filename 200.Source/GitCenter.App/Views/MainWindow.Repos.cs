@@ -134,6 +134,33 @@ public partial class MainWindow
         }
     }
 
+    // 계약: Push 취소는 원격에 되돌림 커밋을 올린다 — 고른 저장소 수를 보이고 먼저 묻는다
+    private async void OnUndoPushClick(object sender, RoutedEventArgs e)
+    {
+        var count = ViewModel.Rows.Count(r => r.IsSelected);
+        if (ViewModel.IsBusy)
+        {
+            return;
+        }
+
+        if (count == 0)
+        {
+            // 왜: 고른 것이 없다는 안내는 일괄 작업이 작업 로그에 남긴다
+            await ViewModel.UndoPushAsync();
+            return;
+        }
+
+        var answer = MessageBox.Show(this,
+            Loc.T("고른 저장소 {0}개의 마지막 Push 를 되돌릴까요?", count) + Environment.NewLine
+            + Loc.T("올리기 전 내용으로 되돌리는 커밋을 하나 더해 올립니다.") + Environment.NewLine
+            + Loc.T("올렸던 커밋은 이력에 남고, Push 뒤에 커밋이 더 생긴 저장소는 건너뜁니다."),
+            "JHJ Git Center", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+        if (answer == MessageBoxResult.Yes)
+        {
+            await ViewModel.UndoPushAsync();
+        }
+    }
+
     private bool FromAnotherHwnd(object? source) =>
         source is DependencyObject at &&
         PresentationSource.FromDependencyObject(at) is { } from &&

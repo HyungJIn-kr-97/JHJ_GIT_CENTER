@@ -25,7 +25,7 @@ namespace GitCenter.Setup
         }
 
         /// 계약: 이 설치 파일이 까는 판 — 「배포 버전.빌드 날짜」(1.0.2.20261012). 창 제목과 확인 문구에 그대로 보인다
-        private static string PackageVersion
+        internal static string PackageVersion
         {
             get
             {
@@ -42,11 +42,42 @@ namespace GitCenter.Setup
             var installer = Setup.Installer;
             installer.DetectInstallDir();
 
-            if (!silent && MessageBox.Show(Describe(installer), title, MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+            // 계약: 묻는 화면은 SetupForm 하나다 — 옵션 다섯 칸을 고른 뒤 그 창이 InstallPackage 를 부른다
+            if (!silent)
             {
-                return 0;
+                using (var form = new SetupForm(packagePath, launch))
+                {
+                    Application.Run(form);
+                    return form.ExitCode;
+                }
             }
 
+            try
+            {
+                // 계약: 조용한 설치(winget)는 화면이 없다 — 처음 까는 PC 에서만 「시작 앱」을 켜고, 업데이트는 사용자가 정해 둔 켬/끔을 건드리지 않는다
+                var options = InstallOptions.Default;
+                if (!installer.IsInstalled)
+                {
+                    options.StartAtLogin = true;
+                }
+
+                InstallPackage(packagePath, options);
+                if (launch)
+                {
+                    installer.Launch();
+                }
+
+                return 0;
+            }
+            catch (Exception)
+            {
+                return 1;
+            }
+        }
+
+        /// <summary>꾸러미를 정해(--package → 품은 것 → 최신 릴리스) 고른 옵션으로 깐다 — 실패는 예외로 올린다.</summary>
+        internal static void InstallPackage(string packagePath, InstallOptions options)
+        {
             string extracted = null;
             try
             {
@@ -56,27 +87,7 @@ namespace GitCenter.Setup
                     zip = extracted = ExtractEmbeddedPackage() ?? DownloadLatest();
                 }
 
-                installer.Install(zip);
-                if (launch)
-                {
-                    installer.Launch();
-                }
-
-                if (!silent)
-                {
-                    MessageBox.Show("설치했습니다.\n" + installer.InstallDir, title, MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-
-                return 0;
-            }
-            catch (Exception ex)
-            {
-                if (!silent)
-                {
-                    MessageBox.Show("설치하지 못했습니다.\n" + ex.Message, title, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-
-                return 1;
+                Setup.Installer.Install(zip, options);
             }
             finally
             {
@@ -88,7 +99,7 @@ namespace GitCenter.Setup
         }
 
         // 계약: 문장이 끝나면 줄을 바꾼다 — 080.CS앱-화면-공통.md §4
-        private static string Describe(AppInstaller installer)
+        internal static string Describe(AppInstaller installer)
         {
             var have = installer.IsInstalled ? installer.InstalledVersion() : null;
             var head = Setup.App.DisplayName + " " + PackageVersion;

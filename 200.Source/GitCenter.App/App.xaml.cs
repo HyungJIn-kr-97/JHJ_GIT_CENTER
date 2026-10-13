@@ -62,7 +62,7 @@ public partial class App : System.Windows.Application
         Loc.Register(LocStrings.Catalog);
 
         // 계약: 자가 업데이트는 설치본(%LOCALAPPDATA%\JHJ_Git-Center\app)에서만 돈다 — 받은 exe 를 처음 띄우면 설치할지 묻는다
-        if (SelfInstaller.TryInstallAndRelaunch(ConfirmInstall, WarnInstallFailed))
+        if (SelfInstaller.TryInstallWithChoices(ChooseInstall, WarnInstallFailed))
         {
             Shutdown(0);
             return;
@@ -187,14 +187,11 @@ public partial class App : System.Windows.Application
         Log.Information("업데이트 확인: {Result}", result);
     }
 
-    // 계약: 묻고 알리는 것은 앱 몫이다 — Core 의 SelfInstaller 는 WPF 를 모른다. 본문(설치본 버전 → 이번 버전)은 Core 의 InstallPromptText 다
-    private static bool ConfirmInstall(InstallPrompt prompt) =>
-        Environment.GetCommandLineArgs().Contains(AppUpdate.SilentInstallArg, StringComparer.OrdinalIgnoreCase) ||
-        System.Windows.MessageBox.Show(
-            InstallPromptText.Describe(prompt),
-            "JHJ Git Center",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question) == MessageBoxResult.Yes;
+    // 계약: 설치 창(옵션 체크 · 설치/설치 없이 실행)은 Core 의 InstallWindow 하나다 — 여기서 다시 그리지 않는다
+    private static InstallChoices? ChooseInstall(InstallPrompt prompt) =>
+        Environment.GetCommandLineArgs().Contains(AppUpdate.SilentInstallArg, StringComparer.OrdinalIgnoreCase)
+            ? InstallChoices.Default
+            : Jhj.Core.Wpf.Install.InstallPrompts.Choose(prompt);
 
     private static void WarnInstallFailed(string message) =>
         System.Windows.MessageBox.Show(message, "JHJ Git Center", MessageBoxButton.OK, MessageBoxImage.Warning);

@@ -21,7 +21,9 @@ param(
     [string]$Platform = "x64",
     [ValidateSet("Release", "Debug")]
     [string]$Configuration = "Release",
-    [string]$BuildDate = ""
+    [string]$BuildDate = "",
+    # Contract: leave the app running - build into bin\deploy so the running dev build (bin\Release) is not locked.
+    [switch]$KeepApp
 )
 
 $ErrorActionPreference = "Stop"
@@ -76,10 +78,17 @@ function Write-Checksum {
 
 # Trap: an instance started from this repo locks bin\ and publish\ and breaks the build - stop it first.
 # Trap: filter by NAME first - scanning every process risks killing someone else's when the path test misfires.
-Get-Process $AppExe -ErrorAction SilentlyContinue |
-    Where-Object { $_.Path -and $_.Path.StartsWith($repoRoot, [StringComparison]::OrdinalIgnoreCase) } |
-    Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep -Milliseconds 400
+if (-not $KeepApp) {
+    Get-Process $AppExe -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -and $_.Path.StartsWith($repoRoot, [StringComparison]::OrdinalIgnoreCase) } |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 400
+}
+
+# Trap: keep the path relative - an absolute BaseOutputPath would send every referenced project into one folder.
+# Trap: do not write this as "$x = if (...) { @('one') }" - a one-item array unrolls to a string and splatting it passes one argument per character.
+$keepAppArgs = @()
+if ($KeepApp) { $keepAppArgs += '-p:BaseOutputPath=bin\deploy\' }
 
 $platforms = if ($Platform -eq "all") { @("win-x64", "win-arm64") } else { @("win-$Platform") }
 Write-Host "Publishing $AppExe v$Release ($Configuration, $($platforms -join ', '))" -ForegroundColor Cyan
@@ -103,7 +112,8 @@ foreach ($rid in $platforms) {
             -p:DebugType=embedded `
             -p:VersionPrefix=$Version `
             -p:Version=$Version `
-            -p:BuildDate=$BuildDate
+            -p:BuildDate=$BuildDate `
+            @keepAppArgs
         if ($LASTEXITCODE -ne 0) {
             Write-Host "Failed to publish $proj for $rid" -ForegroundColor Red
             exit 1

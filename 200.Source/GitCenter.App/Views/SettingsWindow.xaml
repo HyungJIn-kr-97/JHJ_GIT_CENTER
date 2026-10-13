@@ -5,6 +5,7 @@
         xmlns:core="clr-namespace:Jhj.Core.App;assembly=Jhj.Core"
         xmlns:vm="clr-namespace:GitCenter.App.ViewModels"
         xmlns:tabs="clr-namespace:GitCenter.App.Views.SettingsTabs"
+        xmlns:deploy="clr-namespace:Jhj.Core.Wpf.Deploy;assembly=Jhj.Core.Wpf"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="JHJ Git Center — 설정"
         Width="980" Height="780" MinWidth="860" MinHeight="620"
@@ -66,7 +67,7 @@
                 </Button>
                 <Button x:Name="ShareDeployButton" Style="{StaticResource IconButton}" Click="OnShareDeployClick" Visibility="Collapsed"
                         Foreground="{DynamicResource AccentBrush}"
-                        ToolTip="{loc:Tr '배포하기 — 배포 콘솔을 엽니다. 계정과 이 장비가 배포 이력에 남습니다'}">
+                        ToolTip="{loc:Tr '배포하기 — 버전을 고르면 이 화면에서 진행이 보입니다. 계정과 이 장비가 배포 이력에 남습니다'}">
                     <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconUpload}" />
                 </Button>
             </StackPanel>
@@ -86,6 +87,13 @@
             <TabItem Header="동기화"><tabs:SyncTab /></TabItem>
             <TabItem Header="git 동작"><tabs:GitTab /></TabItem>
         </TabControl>
+
+        <!-- 계약: 배포 화면은 탭 자리를 덮는 별개 화면이다 — 머리 줄의 「배포하기」가 여닫고, 열려 있는 동안 그 단추에 강조색 바탕이 든다(030 규격 §1-1) -->
+        <!-- 계약: 몸통은 Core 의 DeployPanel 이다 — 단추·콤보·체크는 이 앱의 암묵 스타일을 그대로 받는다 -->
+        <Border x:Name="DeployHost" Grid.Row="1" Background="{DynamicResource BgBrush}" Padding="2,0,2,0" Visibility="Collapsed">
+            <deploy:DeployPanel x:Name="DeployView" Foreground="{DynamicResource TextPrimaryBrush}"
+                                AccentBrush="{DynamicResource AccentBrush}" LineBrush="{DynamicResource DividerBrush}" />
+        </Border>
 
         <Border Grid.Row="2" Style="{StaticResource HDivider}" Margin="0,12,0,0" VerticalAlignment="Top" />
         <!-- 계약: 단추가 오른쪽을 쓰므로 버전은 바닥 왼쪽이다 — 080.CS앱-화면-공통.md §5 -->

@@ -363,8 +363,7 @@ public sealed partial class MainViewModel
             return;
         }
 
-        if (confirm is not null && MessageBox.Show(confirm, "JHJ Git Center", MessageBoxButton.YesNo,
-                MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+        if (confirm is not null && !JhjMessage.Confirm(confirm))
         {
             return;
         }

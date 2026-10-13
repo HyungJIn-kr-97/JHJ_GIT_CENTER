@@ -124,11 +124,9 @@ public partial class MainWindow
             return;
         }
 
-        var answer = MessageBox.Show(this,
-            Loc.T("{0} 저장소를 {1} 브랜치로 Switch 할까요?", row.Name, branch.Name) + Environment.NewLine
-            + Loc.T("변경한 파일이 그 브랜치와 겹치면 옮기지 않습니다."),
-            "JHJ Git Center", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
-        if (answer == MessageBoxResult.Yes)
+        if (JhjMessage.For(this).Confirm(
+                Loc.T("{0} 저장소를 {1} 브랜치로 Switch 할까요?", row.Name, branch.Name),
+                Loc.T("변경한 파일이 그 브랜치와 겹치면 옮기지 않습니다.")))
         {
             await ViewModel.SwitchToBranchAsync(branch);
         }
@@ -150,12 +148,10 @@ public partial class MainWindow
             return;
         }
 
-        var answer = MessageBox.Show(this,
-            Loc.T("고른 저장소 {0}개의 마지막 Push 를 되돌릴까요?", count) + Environment.NewLine
-            + Loc.T("올리기 전 내용으로 되돌리는 커밋을 하나 더해 올립니다.") + Environment.NewLine
-            + Loc.T("올렸던 커밋은 이력에 남고, Push 뒤에 커밋이 더 생긴 저장소는 건너뜁니다."),
-            "JHJ Git Center", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
-        if (answer == MessageBoxResult.Yes)
+        if (JhjMessage.For(this).ConfirmDanger(
+                Loc.T("고른 저장소 {0}개의 마지막 Push 를 되돌릴까요?", count),
+                Loc.T("올리기 전 내용으로 되돌리는 커밋을 하나 더해 올립니다."),
+                Loc.T("올렸던 커밋은 이력에 남고, Push 뒤에 커밋이 더 생긴 저장소는 건너뜁니다.")))
         {
             await ViewModel.UndoPushAsync();
         }

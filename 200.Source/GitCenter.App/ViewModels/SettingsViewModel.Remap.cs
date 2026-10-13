@@ -179,9 +179,7 @@ public sealed partial class SettingsViewModel
         return _main.IsBusy;
     }
 
-    private static bool Confirm(string message) =>
-        MessageBox.Show(message, "JHJ Git Center", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)
-        == MessageBoxResult.Yes;
+    private static bool Confirm(string message) => JhjMessage.ConfirmDanger(message);
 
     /// 계약: 설정 객체를 통째로 갈아엎은 뒤 화면의 줄 목록을 그 값으로 다시 채운다
     private void ReloadLists()

@@ -321,12 +321,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             Log.Error(ex, "설정 창을 열지 못했습니다");
-            MessageBox.Show(
-                this,
-                $"설정 창을 열지 못했습니다: {ex.Message}",
-                "JHJ Git Center",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            JhjMessage.For(this).Error("설정 창을 열지 못했습니다.", ex);
         }
     }
 }

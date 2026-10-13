@@ -153,20 +153,17 @@ namespace GitCenter.Setup
 
         private static int Uninstall(bool silent, bool purge)
         {
-            var title = Setup.App.DisplayName + " 제거";
             Setup.Installer.DetectInstallDir();
             var keepData = !purge;
             if (!silent)
             {
-                var answer = MessageBox.Show(
-                    "설치된 앱을 제거합니다.\n\n설정(" + Setup.Installer.DataDir + ")도 함께 지울까요?\n「예」= 모두 지움\n「아니요」= 앱만 지우고 설정은 남김",
-                    title, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-                if (answer == DialogResult.Cancel)
+                var choice = SetupPrompts.ConfirmUninstall(null, Setup.Installer);
+                if (choice == UninstallChoice.Cancel)
                 {
                     return 0;
                 }
 
-                keepData = answer == DialogResult.No;
+                keepData = choice == UninstallChoice.KeepData;
             }
 
             try
@@ -174,7 +171,7 @@ namespace GitCenter.Setup
                 Setup.Installer.Uninstall(keepData);
                 if (!silent)
                 {
-                    MessageBox.Show(keepData ? "제거했습니다.\n설정은 남겨 두었습니다." : "제거했습니다.\n설정도 지웠습니다.", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    SetupPrompts.UninstallDone(null, Setup.Installer, keepData);
                 }
 
                 return 0;
@@ -183,7 +180,7 @@ namespace GitCenter.Setup
             {
                 if (!silent)
                 {
-                    MessageBox.Show("제거하지 못했습니다.\n" + ex.Message, title, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    SetupPrompts.UninstallFailed(null, Setup.Installer, ex);
                 }
 
                 return 1;

@@ -45,9 +45,9 @@ public sealed partial class MainViewModel
 
         if (GitHub.IsLoggedIn)
         {
-            var ask = Loc.T("GitHub 계정 {0} 에서 로그아웃할까요?", GitHub.Login) + Environment.NewLine
-                      + Loc.T("이 PC 의 gh 로그인이 풀립니다 — 콘솔의 gh 명령도 함께 로그아웃됩니다.");
-            if (MessageBox.Show(ask, "JHJ Git Center", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+            if (!JhjMessage.Confirm(
+                    Loc.T("GitHub 계정 {0} 에서 로그아웃할까요?", GitHub.Login),
+                    Loc.T("이 PC 의 gh 로그인이 풀립니다 — 콘솔의 gh 명령도 함께 로그아웃됩니다.")))
             {
                 return;
             }

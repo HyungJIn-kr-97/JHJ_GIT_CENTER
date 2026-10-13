@@ -131,10 +131,7 @@ namespace GitCenter.Setup
                 if (options.PinToTaskbar && !_installer.IsPinnedToTaskbar)
                 {
                     var shortcut = _installer.RevealShortcutForTaskbarPin();
-                    MessageBox.Show(
-                        this,
-                        "작업 표시줄 고정은 Windows 가 프로그램에 허용하지 않습니다.\n열린 폴더에서 선택된 바로가기를 오른쪽 클릭한 뒤\n「작업 표시줄에 고정」을 눌러 주십시오.\n\n바로가기: " + shortcut,
-                        Setup.App.DisplayName + " · 작업 표시줄 고정", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    SetupPrompts.TaskbarPinNotice(this, _installer, shortcut);
                 }
 
                 if (_runAfter.Checked)
@@ -150,7 +147,7 @@ namespace GitCenter.Setup
             {
                 ExitCode = 1;
                 _status.Text = "설치하지 못했습니다.";
-                MessageBox.Show(this, "설치하지 못했습니다.\n" + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                SetupMessage.Error(this, Text, "설치하지 못했습니다.", ex, SetupMessage.LogPath(_installer));
             }
             finally
             {

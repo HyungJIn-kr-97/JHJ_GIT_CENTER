@@ -71,10 +71,41 @@ public partial class SettingsWindow : Window
     // 계약: 계정 확인 → 이력 시작 기록 → 배포 콘솔 순서는 Core 가 지킨다 — 여기서는 결과만 창 바닥 줄에 알린다
     private async void OnShareDeployClick(object sender, RoutedEventArgs e)
     {
+        // 계약: release.ps1 이 묻지 않고 도는 인자를 받으면 앱 안 배포 화면을 여닫는다 — 못 받는 옛 스크립트면 콘솔 배포 그대로다
+        if (_deploy.SupportsInApp)
+        {
+            SetDeployOpen(DeployHost.Visibility != Visibility.Visible);
+            return;
+        }
+
         ShareDeployButton.IsEnabled = false;
         var (outcome, detail) = await _deploy.StartAsync();
         ShareDeployButton.IsEnabled = true;
         Tell(Jhj.Core.Wpf.Localization.AppDeployText.Describe(outcome, detail));
+    }
+
+    private Jhj.Core.Wpf.Deploy.DeployPanelViewModel? _deployViewModel;
+
+    // 계약: 배포 화면을 닫아도 돌고 있는 배포는 계속 돈다 — 열려 있는 동안 「배포하기」 단추에 강조색 바탕이 든다
+    // 함정: 뷰모델은 이 창과 함께 사라진다 — 설정 창을 닫았다 열면 진행 표시는 이어지지 않는다(배포 자체는 끝까지 간다)
+    private void SetDeployOpen(bool open)
+    {
+        if (open && _deployViewModel is null)
+        {
+            _deployViewModel = new Jhj.Core.Wpf.Deploy.DeployPanelViewModel(_deploy);
+            _deployViewModel.CloseRequested += (_, _) => SetDeployOpen(false);
+            DeployView.DataContext = _deployViewModel;
+        }
+
+        DeployHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        if (open)
+        {
+            ShareDeployButton.SetResourceReference(BackgroundProperty, "AccentSoftBrush");
+        }
+        else
+        {
+            ShareDeployButton.ClearValue(BackgroundProperty);
+        }
     }
 
     // 계약: 창을 닫을 때 단축키를 다시 등록한다 — 설정에서 바꿔도 다시 시작하지 않아도 되게

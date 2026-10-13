@@ -44,6 +44,8 @@ public partial class App : System.Windows.Application
         {
             Name = "JHJ_Git-Center",
             DisplayName = "JHJ Git 통합 관리 센터",
+            // 계약: 알림 상자 제목이 창 머리와 같은 이름이다(080 §1) — JhjMessage 가 읽는다
+            WindowTitle = "JHJ Git Center",
             DefaultPalette = JhjPalettes.Violet,
             // 계약: 공개 저장소 좌표 — 「이슈 열기」·링크 주소(AppLinks)가 여기서 나온다
             Repository = AppUpdate.Repository,
@@ -157,11 +159,7 @@ public partial class App : System.Windows.Application
         catch (Exception ex)
         {
             Log.Fatal(ex, "시작 실패");
-            System.Windows.MessageBox.Show(
-                $"시작하지 못했습니다: {ex.Message}\n\n{ex.StackTrace}",
-                "JHJ Git Center",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            JhjMessage.Error("시작하지 못했습니다.", ex);
             Shutdown(1);
         }
     }
@@ -193,8 +191,7 @@ public partial class App : System.Windows.Application
             ? InstallChoices.Default
             : Jhj.Core.Wpf.Install.InstallPrompts.Choose(prompt);
 
-    private static void WarnInstallFailed(string message) =>
-        System.Windows.MessageBox.Show(message, "JHJ Git Center", MessageBoxButton.OK, MessageBoxImage.Warning);
+    private static void WarnInstallFailed(string message) => JhjMessage.Warn(message);
 
     private void BuildHost(ISettingsStore settingsStore, AppSettings settings)
     {
@@ -339,17 +336,20 @@ public partial class App : System.Windows.Application
         _offeringReport = true;
         try
         {
-            var head = $"처리되지 않은 오류가 났습니다.\n\n{ex.GetType().Name}: {ex.Message}";
+            const string summary = "처리되지 않은 오류가 났습니다.";
             if (main is null)
             {
-                System.Windows.MessageBox.Show(head, "JHJ Git Center", MessageBoxButton.OK, MessageBoxImage.Error);
+                JhjMessage.Error(summary, ex);
                 return;
             }
 
-            var answer = System.Windows.MessageBox.Show(
-                $"{head}\n\n오류 기록과 환경·설정·이벤트 로그를 복사하고 이슈 양식을 열까요?\n(저장소 경로와 원격 주소는 가립니다. 나중에는 상태 줄의 「오류 보고」로도 할 수 있습니다.)",
-                "JHJ Git Center", MessageBoxButton.YesNo, MessageBoxImage.Error);
-            if (answer == MessageBoxResult.Yes)
+            var question = Jhj.Core.Text.MessageText.Lines(
+                "오류 기록과 환경·설정·이벤트 로그를 복사하고",
+                "이슈 양식을 열까요?",
+                string.Empty,
+                "저장소 경로와 원격 주소는 가립니다.",
+                "나중에는 상태 줄의 「오류 보고」로도 할 수 있습니다.");
+            if (JhjMessage.ConfirmError(summary, ex, question))
             {
                 main.ReportErrorCommand.Execute(null);
             }

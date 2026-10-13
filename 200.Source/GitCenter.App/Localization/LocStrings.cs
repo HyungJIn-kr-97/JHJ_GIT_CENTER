@@ -298,6 +298,7 @@ internal static class LocStrings
         ["설치 파일 주소 복사 — 받는 사람은 언제나 최신 설치 파일을 받습니다"] = "Copy setup file link — anyone you send it to gets the latest setup file",
         ["설치 파일 내려받기 — 브라우저로 최신 설치 파일을 받습니다"] = "Download setup file — the latest installer, via your browser",
         ["배포하기 — 배포 콘솔을 엽니다. 계정과 이 장비가 배포 이력에 남습니다"] = "Deploy — opens the release console; the account and this PC are recorded in the deploy history",
+        ["배포하기 — 버전을 고르면 이 화면에서 진행이 보입니다. 계정과 이 장비가 배포 이력에 남습니다"] = "Deploy — pick the version and watch the progress here; the account and this PC are recorded in the deploy history",
         [".gitignore 에 쓰기 — 커밋되는 파일"] = "Write to .gitignore — a committed file",
         ["도움말"] = "Help",
         ["이 화면의 기능을 차례로 짚어 줍니다"] = "Walks through this screen step by step",

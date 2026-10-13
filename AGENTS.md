@@ -59,7 +59,10 @@
   ⛔ 진단 보고서에 저장소 경로·원격 주소·작성자를 넣지 않는다 — 사용자가 GitHub 이슈에 그대로 붙인다(`SettingsViewModel.BuildDiagnostics`).
   함정: 「화면」 탭의 「기본값으로」는 아직 「일반」·「아이콘」 탭의 값(단축키 · 트레이 · 아이콘)까지 되돌린다 — 탭별로 가르는 일이 남았다.
   계약: 창 머리 「앱 공유하기」의 「배포하기」는 Core 의 `AppDeploy` 를 물린 것이다 — 개발 장비 + 저장소 소유자 계정일 때만 보이고,
-  `JHJ_DEV\800.Deploy\deploy-history.jsonl` 에 시작 기록을 쓴 뒤에만 `release.ps1` 콘솔을 연다(030 규격 §1-1). 판정·이력을 여기서 다시 짜지 않는다.
+  `JHJ_DEV\800.Deploy\deploy-history.jsonl` 에 시작 기록을 쓴 뒤에만 배포를 돌린다(030 규격 §1-1). 판정·이력을 여기서 다시 짜지 않는다.
+  계약: 누르면 콘솔이 아니라 **설정 창 안의 배포 화면**(Core `DeployPanel` — `SettingsWindow` 의 `DeployHost` 가 탭 자리를 덮는다)이 여닫힌다 — `release.ps1` 이 `-Unattended` 를 받을 때이고(`AppDeploy.SupportsInApp`), 못 받는 옛 스크립트면 콘솔 배포 그대로다.
+  계약: 앱 안 배포는 `release.ps1 -Unattended -KeepApp -Bump … -Date … [-Overwrite]` 로 돌고 `-KeepApp` 이 빌드를 `bin\deploy` 로 보내 앱을 내리지 않는다 — `publish.ps1` 의 그 인자를 지우지 않는다.
+  함정: 배포 화면의 뷰모델은 설정 창과 함께 사라진다 — 창을 닫았다 열면 진행 표시는 이어지지 않고 배포 자체는 끝까지 간다.
   계약: 「앱 공유하기」 셋(winget 명령 · 설치 파일 주소 · 내려받기)의 좌표는 `Services/AppUpdate.cs` 다 — `SetupAssetName` 은 `publish.ps1` 의 `$SetupAsset`,
   `WingetId` 는 `winget-manifest.ps1` 의 `$id` 와 같아야 한다.
   ★ 계약: **설치 파일(`JHJ_Git-Center_Setup.exe`)은 진짜 설치 관리자다** — `200.Source/GitCenter.Setup`(net48 · `Jhj.Core.Setup` 소스 링크)이고 `publish.ps1` 이 업데이트 꾸러미 zip 을 품겨 빌드한다(`-p:PackageZip`). 같은 내용이 `…_Setup_<버전>.exe` 로도 나간다. ⛔ 앱 exe 를 이름만 바꿔 설치 파일로 내지 않는다(규격 `JHJ_CS_CORE/300.Docs/040`).

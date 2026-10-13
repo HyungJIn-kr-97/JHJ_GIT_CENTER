@@ -58,7 +58,9 @@ public sealed partial class MainViewModel
             return;
         }
 
-        AddActivity("GitHub", StepOutcome.Success, Loc.T("gh 로그인 콘솔을 열었습니다 — 콘솔의 안내대로 브라우저에서 승인해 주십시오."));
+        AddActivity("GitHub", StepOutcome.Success, GitHub.IsGhInstalled
+            ? Loc.T("gh 로그인 콘솔을 열었습니다 — 콘솔의 안내대로 브라우저에서 승인해 주십시오.")
+            : Loc.T("winget 으로 gh CLI 를 설치하는 콘솔을 열었습니다 — 끝나면 로그인 콘솔이 이어서 열립니다."));
         var ok = await GitHub.LoginAsync(CancellationToken.None).ConfigureAwait(true);
         AddActivity("GitHub", ok ? StepOutcome.Success : StepOutcome.Failed,
             ok ? Loc.T("GitHub 계정 {0} 으로 로그인했습니다.", GitHub.Login)

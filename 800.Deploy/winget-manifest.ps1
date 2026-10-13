@@ -52,6 +52,11 @@ InstallerSwitches:
   Silent: --silent
   SilentWithProgress: --silent
 UpgradeBehavior: install
+# 계약: 조용한 설치(winget)는 설치 화면의 「필수 도구」가 돌지 않는다 — 같은 두 패키지를 winget 이 먼저 깐다(GitCenter.Setup/Prerequisites.cs 와 짝)
+Dependencies:
+  PackageDependencies:
+  - PackageIdentifier: Git.Git
+  - PackageIdentifier: GitHub.cli
 Installers:
 - Architecture: x64
   InstallerUrl: $url

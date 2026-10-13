@@ -19,6 +19,20 @@
       함정: 글상자의 안내 문구는 트리거가 아니라 바인딩으로 켠다 — DataTrigger 는 켜지지 않았다(2026-10-09 실측).
     -->
 
+    <!--
+      ★ 계약: 단추 색은 「하는 일」이 정한다 — 낱말이 달라도 같은 일이면 띠·층(팝업) 어디서든 같은 색이다(2026-10-13 사용자 지시).
+        PushButton  채운 강조색 — 올리는 일(커밋 + Push · 받아서 Merge + Push · 진행 · 만들어 올리기). 가장 급한 일이라 가장 진하다.
+        MergeButton 강조색 테두리 + 옅은 바탕 — 받아 합치는 일(지금 브랜치로 Merge · 병합 마무리). 올리기 다음이다.
+        DangerButton(Core) — 취소·버리기(Merge 취소 · Push 취소 · stash 버리기 · 작업 중지).
+        PrimaryButton(Core) 은 그 밖의 「적용·만들기」 확인 단추에만 남긴다.
+    -->
+    <Style x:Key="PushButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}" />
+    <Style x:Key="MergeButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+        <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
     <local:StateBrushConverter x:Key="StateBrush" />
     <local:OutcomeBrushConverter x:Key="OutcomeBrush" />
     <local:ChangeKindConverter x:Key="ChangeKind" />

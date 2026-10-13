@@ -13,7 +13,7 @@
                     <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"
                                Text="고르면 바로 창 머리 · 작업 표시줄 · 트레이에 비칩니다. 저장은 아래 「적용」입니다." />
                     <StackPanel Orientation="Horizontal">
-                        <ComboBox Width="210" ItemsSource="{Binding IconChoices}" SelectedItem="{Binding IconChoice}">
+                        <ComboBox Width="270" ItemsSource="{Binding IconChoices}" SelectedItem="{Binding IconChoice}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal">

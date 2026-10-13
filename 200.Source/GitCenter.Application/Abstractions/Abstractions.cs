@@ -81,6 +81,12 @@ public interface IGitService
     /// 계약: 지금 브랜치의 최근 days 일 커밋을 작성자별 · 시간대별로 센다 — 로컬만 읽는다
     Task<CommitFacts> ReadCommitFactsAsync(RepoEntry repo, int days, CancellationToken cancellationToken);
 
+    /// 계약: 지금 브랜치의 최근 days 일 커밋이 건드린 파일을 경로마다 하나(마지막 날 · 횟수)로 준다 — 로컬만 읽는다
+    Task<IReadOnlyList<FileTouch>> ReadFileTouchesAsync(RepoEntry repo, int days, CancellationToken cancellationToken);
+
+    /// 계약: 모든 ref 의 reflog 에서 최근 days 일 안에 생긴 줄을 새것부터 준다(최대 300) — 로컬만 읽는다
+    Task<IReadOnlyList<ReflogEntry>> ReadReflogAsync(RepoEntry repo, int days, CancellationToken cancellationToken);
+
     /// 계약: reference(브랜치 · 원격 추적 ref)의 커밋을 새것부터 max 건 준다 — 읽기뿐이다
     Task<IReadOnlyList<CommitInfo>> ReadBranchLogAsync(RepoEntry repo, string reference, int max, CancellationToken cancellationToken);
 

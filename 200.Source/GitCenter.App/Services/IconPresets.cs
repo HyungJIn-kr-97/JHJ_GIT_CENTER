@@ -18,19 +18,29 @@ internal static class IconPresets
     public const string Network = "network";
 
     public const string Glyph = "glyph";
+    public const string LuxJgm = "lux-jgm";
     public const string LuxJg = "lux-jg";
     public const string LuxJgViolet = "lux-jg-violet";
     public const string LuxJ = "lux-j";
     public const string Classic = "classic";
+    public const string BoldJg = "bold-jg";
+    public const string BoldJgViolet = "bold-jg-violet";
+    public const string BoldJ = "bold-j";
+    public const string ClassicSmall = "classic-small";
 
-    // 계약: 기본 그림(app-icon.ico)은 검은 보라 바탕의 금속 JG 모노그램이다(make_jhj_icon.py --style lux --mono JGm --bg obsidian · 2026-10-12 사용자 선택)
-    // 계약: 「JHJ + 가지」는 금속 그림으로 바꾸기 전의 기본 그림이다 — 고르던 사람이 잃지 않게 선택지로 남긴다
+    // 계약: 기본 그림(app-icon.ico)은 검은 보라 바탕의 금속 JG 모노그램이다(make_jhj_icon.py --style lux --mono JGm --bg obsidian · 2026-10-12 사용자 선택) — 모든 크기 한 디자인(070 §1 · 2026-10-14)
+    // 계약: 선택지도 전부 `--uniform` 으로 만든 「모든 크기 한 디자인」 그림이다 — 견본·작업 표시줄·Alt+Tab 이 같아야 한다. large 는 큰 판 그림, small 은 작은 판 그림(굵은 금 글자 · J + 표지)
     public static AppIconPreset[] All =>
     [
+        AppIcon.IcoPreset(LuxJgm, "금속 JG 모노그램 · 검은 보라", "pack://application:,,,/Resources/app-icon-lux-jgm.ico"),
         AppIcon.IcoPreset(LuxJg, "금속 JG · 검은 보라", "pack://application:,,,/Resources/app-icon-lux-jg.ico"),
         AppIcon.IcoPreset(LuxJgViolet, "금속 JG · 보라", "pack://application:,,,/Resources/app-icon-lux-jg-violet.ico"),
         AppIcon.IcoPreset(LuxJ, "금속 J · 검은 보라", "pack://application:,,,/Resources/app-icon-lux-j.ico"),
+        AppIcon.IcoPreset(BoldJg, "굵은 금 JG · 검은 보라", "pack://application:,,,/Resources/app-icon-bold-jg.ico"),
+        AppIcon.IcoPreset(BoldJgViolet, "굵은 금 JG · 보라", "pack://application:,,,/Resources/app-icon-bold-jg-violet.ico"),
+        AppIcon.IcoPreset(BoldJ, "굵은 금 J · 검은 보라", "pack://application:,,,/Resources/app-icon-bold-j.ico"),
         AppIcon.IcoPreset(Classic, "JHJ + 가지", "pack://application:,,,/Resources/app-icon-classic.ico"),
+        AppIcon.IcoPreset(ClassicSmall, "J + 가지", "pack://application:,,,/Resources/app-icon-classic-small.ico"),
         AppIcon.IcoPreset(Glyph, "가지 모양", "pack://application:,,,/Resources/app-icon-glyph.ico"),
         new AppIconPreset(Connect, "연결", px => Draw(px, DrawConnect)),
         new AppIconPreset(Network, "그물", px => Draw(px, DrawNetwork)),

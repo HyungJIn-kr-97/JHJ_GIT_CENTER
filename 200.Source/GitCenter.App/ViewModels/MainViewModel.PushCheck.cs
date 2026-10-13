@@ -48,6 +48,7 @@ public sealed partial class MainViewModel
 {
     private TaskCompletionSource<bool>? _offBranchAnswer;
     private IReadOnlyDictionary<string, string> _lastConfirmed = new Dictionary<string, string>();
+    private string _nudgeBeforeGap = string.Empty;
 
     /// 계약: 층에 충돌 난 저장소가 있으면 안내 줄을 보인다
     [ObservableProperty]
@@ -194,7 +195,25 @@ public sealed partial class MainViewModel
         PushGapCaption = PushGapRows.Count == 0
             ? Loc.T("Push 되지 않은 저장소가 없습니다.")
             : Loc.T("커밋과 Push 상태가 다른 저장소 {0}개", PushGapRows.Count);
+
+        // 왜: 예외를 가리는 것보다 받아서 올리는 것이 먼저다 — 층이 뜨면 「받아서 Merge + Push」를 깜빡인다(2026-10-13 사용자 지시)
+        if (PushGapCanSync && NudgeAction != BulkNextAction.Sync)
+        {
+            _nudgeBeforeGap = NudgeAction;
+            NudgeAction = BulkNextAction.Sync;
+        }
+
         IsPushGapOpen = true;
+    }
+
+    /// 계약: 층이 닫히면 깜빡임을 층이 뜨기 전 것으로 되돌린다 — 띠의 「지금 브랜치로 Merge」가 가리키던 것이 사라지지 않게
+    partial void OnIsPushGapOpenChanged(bool value)
+    {
+        if (!value && NudgeAction == BulkNextAction.Sync)
+        {
+            NudgeAction = _nudgeBeforeGap;
+            _nudgeBeforeGap = string.Empty;
+        }
     }
 
     /// 계약: Push 가 낀 일괄 작업 뒤에만 저절로 뜬다 — 커밋만 했을 때는 「Push 전」이 당연해 띄우지 않는다

@@ -98,24 +98,6 @@ namespace GitCenter.Setup
             }
         }
 
-        // 계약: 문장이 끝나면 줄을 바꾼다 — 080.CS앱-화면-공통.md §4
-        internal static string Describe(AppInstaller installer)
-        {
-            var have = installer.IsInstalled ? installer.InstalledVersion() : null;
-            var head = Setup.App.DisplayName + " " + PackageVersion;
-            switch (installer.Classify(PackageVersion))
-            {
-                case InstallAction.Update:
-                    return head + " 로 업데이트합니다.\n설치된 버전: " + have + "\n\n설치 위치: " + installer.InstallDir;
-                case InstallAction.Reinstall:
-                    return head + " 을(를) 다시 설치합니다.\n같은 버전이 이미 설치돼 있습니다.\n\n설치 위치: " + installer.InstallDir;
-                case InstallAction.Rollback:
-                    return head + " 로 되돌립니다.\n설치된 버전이 더 높습니다: " + have + "\n\n설치 위치: " + installer.InstallDir;
-                default:
-                    return head + " 을(를) 설치합니다.\n\n설치 위치: " + installer.InstallDir;
-            }
-        }
-
         // 계약: 꾸러미는 publish.ps1 이 「package.zip」이라는 논리 이름으로 넣는다 — 없으면 null 이고 최신 릴리스를 받는다
         private static string ExtractEmbeddedPackage()
         {

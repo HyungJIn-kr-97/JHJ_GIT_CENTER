@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.Input;
 using GitCenter.Application.Settings;
 using GitCenter.Core.Models;
 
@@ -6,7 +7,8 @@ namespace GitCenter.App.ViewModels;
 
 // 상세의 「상태」 탭 — 줄에 보이는 한 단어(「올릴 것」·「변경」·「stash 2」)가 왜 그런지를 한 줄씩 풀어 적고,
 // stash 는 목록으로 펼친다. 숫자만 보고는 지워도 되는지 판단할 수 없기 때문이다(2026-10-11 사용자 지시).
-// 계약: 읽기뿐이다 — 이 탭은 git 에 쓰지 않는다. stash 는 `stash list`·`stash show --name-only` 두 번만 부른다.
+// 계약: 읽기는 `stash list`·`stash show --name-only` 두 번이다. 쓰는 것은 stash 줄의 「되살리기」(pop)·「버리기」(drop) 둘뿐이고
+//   버리기는 되돌릴 수 없어 먼저 묻는다(2026-10-13 사용자 지시 — 터미널로 보내던 것을 앱 안으로).
 
 /// <summary>「상태」 탭의 사유 한 줄.</summary>
 /// 계약: Tone 은 StateBrushConverter 가 아는 한 단어다 — 「충돌」·「받을 것」·「올릴 것」·「변경」·「깨끗함」
@@ -150,6 +152,35 @@ public sealed partial class MainViewModel
         if (!status.IsDirty && status.Conflicted == 0 && stashCount == 0 && status.Operation is GitOperationState.None)
         {
             yield return new StatusReason("깨끗함", "작업 트리 깨끗함", "커밋할 변경이 없습니다.");
+        }
+    }
+
+    // ── stash 되살리기 · 버리기 ──────────────────────────────
+
+    /// <summary>그 stash 를 작업 트리에 되살리고 목록에서 지운다(git stash pop).</summary>
+    /// 계약: pop 이 충돌하면 git 이 stash 를 지우지 않고 남긴다 — 잃는 것이 없어 묻지 않는다
+    [RelayCommand]
+    private Task RestoreStashAsync(StashEntry? stash) => stash is null
+        ? Task.CompletedTask
+        : RunStashToolAsync(Loc.T("stash 되살리기"), ["stash", "pop", stash.Ref]);
+
+    /// <summary>그 stash 를 버린다(git stash drop) — 되돌릴 수 없어 먼저 묻는다.</summary>
+    /// 함정: drop 은 reflog 에도 남지 않는다 — 확인 상자에 메시지와 파일 수를 그대로 보인다
+    [RelayCommand]
+    private Task DropStashAsync(StashEntry? stash) => stash is null
+        ? Task.CompletedTask
+        : RunStashToolAsync(Loc.T("stash 버리기"), ["stash", "drop", stash.Ref],
+            Loc.T("{0} 을(를) 버립니다 — 되돌릴 수 없습니다. 계속할까요?", stash.Ref)
+            + "\n" + stash.Message + "\n" + Loc.T("파일 {0}개", stash.Files.Count));
+
+    // 함정: RunToolAsync 가 상세를 다시 읽으며 탭을 「변경 파일」로 되돌린다 — stash 를 다루던 「상태」 탭에 그대로 남긴다(충돌 탭으로 옮긴 것은 둔다)
+    private async Task RunStashToolAsync(string title, IReadOnlyList<string> args, string? confirm = null)
+    {
+        var tab = DetailTabIndex;
+        await RunToolAsync(title, args, confirm: confirm).ConfigureAwait(true);
+        if (DetailTabIndex == 0)
+        {
+            DetailTabIndex = tab;
         }
     }
 

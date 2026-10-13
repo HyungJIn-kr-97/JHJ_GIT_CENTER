@@ -79,7 +79,7 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Command="{Binding PublishCommand}"
+                    <Button Grid.Column="1" Style="{StaticResource PushButton}" Command="{Binding PublishCommand}"
                             ToolTip="{loc:Tr 'gh repo create 로 저장소를 만들고 원격을 연결한 뒤 지금 브랜치를 올립니다 — force 는 없습니다'}">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconExternal}" Margin="0,0,6,0" />

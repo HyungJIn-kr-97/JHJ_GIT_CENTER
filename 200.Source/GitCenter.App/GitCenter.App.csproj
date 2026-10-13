@@ -59,6 +59,11 @@
     <Resource Include="Resources\app-icon-lux-jg-violet.ico" />
     <Resource Include="Resources\app-icon-lux-j.ico" />
     <Resource Include="Resources\app-icon-classic.ico" />
+    <Resource Include="Resources\app-icon-lux-jgm.ico" />
+    <Resource Include="Resources\app-icon-bold-jg.ico" />
+    <Resource Include="Resources\app-icon-bold-jg-violet.ico" />
+    <Resource Include="Resources\app-icon-bold-j.ico" />
+    <Resource Include="Resources\app-icon-classic-small.ico" />
   </ItemGroup>
 
 </Project>

@@ -192,6 +192,85 @@ public sealed class GitService(IGitRunner runner) : IGitService
         return new CommitFacts(authors, hours);
     }
 
+    public async Task<IReadOnlyList<FileTouch>> ReadFileTouchesAsync(RepoEntry repo, int days, CancellationToken cancellationToken)
+    {
+        // 계약: 커밋 머리 줄은 Unit 글자(%x1f)로 시작한다 — 파일 경로는 그 글자로 시작할 수 없어 둘이 섞이지 않는다
+        // 함정: 병합 커밋은 --name-only 가 파일을 내지 않는다 — 병합으로 들어온 파일은 원 커밋 쪽에서 센다
+        var log = await _runner.RunAsync(repo.Path,
+            ["-c", "core.quotepath=off", "log", $"--since={days}.days.ago", "--format=%x1f%cs", "--name-only"], cancellationToken, 120).ConfigureAwait(false);
+        if (!log.Ok)
+        {
+            return [];
+        }
+
+        var last = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
+        var touches = new Dictionary<string, int>(StringComparer.Ordinal);
+        DateOnly? day = null;
+        foreach (var raw in log.StdOut.Split('\n'))
+        {
+            var line = raw.TrimEnd('\r');
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            if (line[0] == Unit)
+            {
+                day = DateOnly.TryParseExact(line[1..].Trim(), "yyyy-MM-dd", out var parsed) ? parsed : null;
+                continue;
+            }
+
+            if (day is null)
+            {
+                continue;
+            }
+
+            // 계약: 새것부터 오므로 처음 본 날이 마지막으로 바뀐 날이다
+            last.TryAdd(line, day.Value);
+            touches[line] = touches.GetValueOrDefault(line) + 1;
+        }
+
+        return [.. last.Select(kv => new FileTouch(kv.Key, kv.Value, touches[kv.Key]))];
+    }
+
+    public async Task<IReadOnlyList<ReflogEntry>> ReadReflogAsync(RepoEntry repo, int days, CancellationToken cancellationToken)
+    {
+        // 계약: %gD 는 --date 를 주면 「ref@{날짜}」가 된다 — 그 날짜가 기록이 생긴 때이고 %ci(커밋한 때)와 다르다
+        // 함정: --since 는 커밋 날짜로 거른다 — 기록 날짜로는 여기서 직접 거른다
+        var log = await _runner.RunAsync(repo.Path,
+            ["reflog", "show", "--all", "--date=iso-strict", "--format=%gD%x1f%gs%x1f%h"], cancellationToken, 60).ConfigureAwait(false);
+        if (!log.Ok)
+        {
+            return [];
+        }
+
+        var since = DateTimeOffset.Now.AddDays(-days);
+        var found = new List<ReflogEntry>();
+        foreach (var line in log.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = line.TrimEnd('\r').Split(Unit, 3);
+            var at = fields[0].IndexOf("@{", StringComparison.Ordinal);
+            if (fields.Length != 3 || at <= 0 || !fields[0].EndsWith('}'))
+            {
+                continue;
+            }
+
+            if (!DateTimeOffset.TryParse(fields[0][(at + 2)..^1], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var when) || when < since)
+            {
+                continue;
+            }
+
+            found.Add(new ReflogEntry(when, fields[0][..at], fields[1], fields[2]));
+            if (found.Count >= 300)
+            {
+                break;
+            }
+        }
+
+        return found;
+    }
+
     public async Task<IReadOnlyList<CommitInfo>> ReadBranchLogAsync(RepoEntry repo, string reference, int max, CancellationToken cancellationToken)
     {
         // 함정: 「--」 를 붙여야 같은 이름의 파일이 있어도 ref 로 읽는다

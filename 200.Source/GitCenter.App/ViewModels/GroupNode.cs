@@ -53,6 +53,27 @@ public sealed partial class GroupNode(string key) : ObservableObject
     /// 계약: 변경도 문제도 없는 저장소 수 — 그룹 카드의 막대가 Total 과 견준다
     public int Clean => Math.Max(0, Total - Dirty - Problem);
 
+    /// 계약: 대시보드 그룹 카드의 「상태」 밖 지표 — MainViewModel.RefreshGroupChart 가 채우고 막대는 MetricValue / MetricMax 다
+    [ObservableProperty]
+    private double _metricValue;
+
+    [ObservableProperty]
+    private double _metricMax;
+
+    [ObservableProperty]
+    private string _metricText = string.Empty;
+
+    [ObservableProperty]
+    private string _metricNote = string.Empty;
+
+    public void SetMetric(double value, double max, string text, string note)
+    {
+        MetricValue = value;
+        MetricMax = max;
+        MetricText = text;
+        MetricNote = note;
+    }
+
     /// <summary>사용자가 그룹 체크 상자를 눌렀다 — 그 그룹의 저장소를 모두 고르거나 푼다.</summary>
     public event Action<GroupNode, bool>? SelectionRequested;
 

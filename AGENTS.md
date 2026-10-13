@@ -27,9 +27,11 @@
   ★ 계약: 원격이 없는 저장소에 일괄 Fetch·Pull·Merge·Push 를 걸면 git 을 부르지 않고 「건너뜀」으로 센다(`GitService.ExecuteAsync` 의 `NeedsRemote` 선판정) —
   git 원문(`fatal: 'origin' does not appear…`)은 사용자가 못 읽는다(2026-10-12 사용자 지시). 그 결과는 `BulkNextAction.Publish` 로 저장소 줄의 「GitHub 에 올리기」를 깜빡인다.
   계약: Fetch·Pull·Merge 의 git fatal 원문 셋(원격 없음·주소 틀림 · 접속 실패 · 인증 실패)은 `GitService.DescribeFailure` 가 우리말로 바꾼다 — 원문은 `Detail`(「자세히」)이 갖는다.
-  ★ 계약: GitHub 계정은 **gh CLI 의 로그인**이다(`Services/GitHubAccount`) — 토큰을 이 앱이 쥐지 않고, 제목 띠의 계정 칩(`AccountButton`)과 설정 「일반」 탭이 같은 객체를 본다.
-  로그인은 `gh auth login --web` 콘솔을 띄워 사람이 하고(JHJ 규약 §4), 시작 때는 Core `AppDeploy.GhAccount`(hosts.yml)만 읽고 누를 때 `gh api user` 로 확인한다. gh 가 없으면 칩이 「gh 없음」이 되고 설치 안내를 낸다.
-  TODO: 워크스페이스 `JHJ\AGENTS.md` §4 「계정 정보는 세 출처」에 맞춰 GitHub Desktop · 브라우저 로그인도 읽는다 — 지금은 gh 하나라 gh 가 없으면 다른 곳에 로그인해 있어도 못 찾는다.
+  ★ 계약: GitHub 계정(`Services/GitHubAccount`)은 **앱을 켤 때 세 출처를 로컬에서 읽어** 제목 띠의 계정 칩(`AccountButton`)에 띄운다 — gh CLI(hosts.yml · 자격 증명 `gh:github.com:*`) → GitHub Desktop(자격 증명 `GitHub - https://api.github.com/*`) → git 자격 증명(`git:https://*` 중 github.com).
+  읽기는 `Infrastructure/Accounts/GitHubAccountSources`, 자격 증명은 항목 이름·사용자 이름만 본다(`CredentialStoreReader` — blob 은 손대지 않는다). 설정 「일반」 탭이 같은 객체를 보고, 칩 툴팁·상태 줄에 **출처**를 함께 적는다(JHJ 규약 §4). 원격에는 닿지 않는다.
+  계약: `IsLoggedIn` 은 **gh CLI 로그인**뿐이다 — 올리기·공유(`gh api`)가 이것을 본다. 다른 출처에서만 읽힌 계정은 칩에 보이되(`HasAccount`) 그 일은 못 하고, 누르면 gh 로그인 콘솔을 연다. 토큰은 여전히 gh 가 쥔다.
+  계약: 로그인은 `gh auth login --web` 콘솔을 띄워 사람이 하고, 끝나면 `gh api user` 로 확인한다. gh 가 없으면 칩이 「gh 설치」가 되고 누르면 **winget 콘솔로 먼저 깐 뒤**(`InstallGhAsync` · `ToolLocator.Invalidate` 가 PATH 를 다시 읽는다) 로그인 콘솔이 이어진다.
+  계약: git · gh 의 자리는 `Infrastructure/Tools/ToolLocator` 가 정한다 — PATH 에 없어도 알려진 설치 폴더에서 찾는다. 커밋 작성자(`git config --global user.name·user.email`)도 시작 때 읽어 칩 툴팁·「일반」 탭에 보인다.
   ★ 계약: 「GitHub 에 올리기」(`Views/PublishLayer` · `MainViewModel.Publish.cs`)는 원격이 없는 저장소(`RepoRow.IsLocalOnly`)에만 보이고, `gh repo create --source --remote --push` 한 번으로 **만들기 + 연결 + 첫 Push** 를 한다 — 기본은 비공개(끄면 공개).
   커밋이 없거나 원격이 이미 있으면 gh 를 부르기 전에 막는다. 여는 곳은 셋 — 저장소 줄 단추 · 상세 「작업」 탭 「GitHub 에 새 저장소 만들어 연결」 · 일괄 작업 「원격 없음」 건너뜀의 Nudge.
   계약: 「오류 보고」(상태 줄 · 시스템 작업 로그 탭)는 실패 기록 + 환경·설정 + 이벤트 로그를 복사하고 이슈 양식을 연다 — Git Center 구역은
@@ -65,7 +67,9 @@
   함정: 배포 화면의 뷰모델은 설정 창과 함께 사라진다 — 창을 닫았다 열면 진행 표시는 이어지지 않고 배포 자체는 끝까지 간다.
   계약: 「앱 공유하기」 셋(winget 명령 · 설치 파일 주소 · 내려받기)의 좌표는 `Services/AppUpdate.cs` 다 — `SetupAssetName` 은 `publish.ps1` 의 `$SetupAsset`,
   `WingetId` 는 `winget-manifest.ps1` 의 `$id` 와 같아야 한다.
-  ★ 계약: **설치 파일(`JHJ_Git-Center_Setup.exe`)은 진짜 설치 관리자다** — `200.Source/GitCenter.Setup`(net48 · `Jhj.Core.Setup` 소스 링크)이고 `publish.ps1` 이 업데이트 꾸러미 zip 을 품겨 빌드한다(`-p:PackageZip`). 같은 내용이 `…_Setup_<버전>.exe` 로도 나간다. ⛔ 앱 exe 를 이름만 바꿔 설치 파일로 내지 않는다(규격 `JHJ_CS_CORE/300.Docs/040`).
+  ★ 계약: **설치 파일(`JHJ_Git-Center_Setup.exe`)은 진짜 설치 관리자다** — `200.Source/GitCenter.Setup`(net48 · `Jhj.Core.Setup` 소스 링크 — 화면은 Core `SetupWindow` 상속, 앱 몫은 꾸러미 풀기뿐 · 규격 040 §6)이고 `publish.ps1` 이 업데이트 꾸러미 zip 을 품겨 빌드한다(`-p:PackageZip`). 같은 내용이 `…_Setup_<버전>.exe` 로도 나간다. ⛔ 앱 exe 를 이름만 바꿔 설치 파일로 내지 않는다(규격 `JHJ_CS_CORE/300.Docs/040`).
+  ★ 계약: 설치 화면의 「필수 도구」는 **Git · GitHub CLI** 둘이다(`GitCenter.Setup/Prerequisites.cs` → Core `SetupWindowOptions.Prerequisites`) — 없는 것은 켠 채로 보이고 앱 설치 뒤 winget 으로 깐다(2026-10-14 사용자 지시 — 첫 설치 PC 에서 git 없이 뜨지 않게).
+  조용한 설치(`--silent`)는 건너뛰고 `800.Deploy/winget-manifest.ps1` 의 `Dependencies`(같은 두 패키지)가 맡는다. 실행 파일 이름·알려진 폴더는 `ToolLocator` 와 같아야 한다.
   계약: 받은 앱 exe(`JHJ_Git-Center_<버전>_win-x64.exe`)를 직접 돌리면 Core `SelfInstaller` 가 묻고 설치한다 — `--silent` 면 묻지 않는다(`App.ConfirmInstall`). 어느 길이든 설치 폴더에는 `JHJ_Git-Center.exe` 하나다.
   함정: `Start-Process <설치 파일> -Wait` 는 설치 파일이 띄운 앱까지 기다려 끝나지 않는다 — 시험 스크립트에서는 `--no-launch` 를 주거나 `-Wait` 를 빼고 폴링한다.
   함정: winget 명령은 `microsoft/winget-pkgs` 가 매니페스트를 받아들인 뒤에만 된다 — 스크립트로 매니페스트를 쓰는 것만으로는 안 된다.
@@ -90,7 +94,13 @@
   계약: 로그 탭 셋은 몸통(`ActivityLogPane`)과 거르개(`ViewModels/ActivityLogView` — 아래 줄의 분류 알약 + 검색)를 함께 쓴다. 「시스템 오류」는 전체 기록에서 실패·충돌만 남긴 보기다 — 원본 목록은 `Activity` 하나다.
   함정: 분류 알약은 `IsChecked` 양방향 바인딩이다 — Command 로 묶으면 UI 자동화·화면 낭독기의 토글이 분류를 못 바꾼다(2026-10-12 실측).
   계약: 「병합」은 git 을 부르기 전에 커밋하지 않은 변경과 들어올 파일(`HEAD...<ref>`)이 겹치는지 본다(`GitService.OverlapWithIncomingAsync`) — 겹치면 실패로 끝내고 겹친 파일을 `Detail` 에 싣는다.
-  계약: 가운데 상세 단은 탭 다섯이다 — 「변경 파일」·「브랜치」·「충돌」·「상태」·「작업」.
+  계약: 가운데 상세 단은 탭 여섯이다 — 「변경 파일」·「브랜치」·「충돌」·「상태」·「작업」·「설정」(`MainViewModel.ShareTabIndex` = 5).
+  ★ 계약: 「설정」 탭(`Views/RepoShareView` · `MainViewModel.Share.cs` · `Services/GitHubAccount.Share.cs`)은 그 저장소의 GitHub 공유 사용자(Collaborators)다 — 전부 `gh api`(repos/{owner}/{repo} · /collaborators?affiliation=direct · /invitations)이고 토큰은 gh 가 쥔다.
+  계약: 「내 저장소」는 `permissions.admin` 이다 — 원격 주소의 소유자 이름과 로그인을 견주지 않는다. 참일 때만 「추가」(`PUT …/collaborators/{login}` · 기본 권한 push)와 줄의 「빼기」(`DELETE` — 초대 중이면 `/invitations/{id}`)가 보이고, 아니면 목록만 본다.
+  계약: 원격에 닿는 때는 탭을 처음 열 때 한 번(`OnDetailTabIndexChanged` → `OnShareTabOpened`)과 「새로 읽기」·「추가」·「빼기」뿐이다 — 저장소를 고르는 것만으로는 읽지 않는다(`ResetShare` 는 원격 주소만 본다). 빼기는 먼저 묻는다.
+  함정: 더하기는 초대다(201) — 받아들이기 전까지 「초대 중」 칩으로 보이고, 조직 구성원·이미 공유된 사람만 204 로 바로 반영된다. `gh api --paginate` 는 쪽마다 배열을 이어 붙여 내므로 `AllowMultipleValues` 로 읽는다.
+  계약: 「상태」 탭의 stash 목록은 줄마다 「되살리기」(`stash pop <ref>`)·「버리기」(`stash drop <ref>`)를 갖는다(`MainViewModel.Status.cs`) — 버리기는 되돌릴 수 없어 메시지·파일 수를 보이고 먼저 묻는다. 그 밖에 이 탭이 git 에 쓰는 것은 없다.
+  계약: 거르개 「상태」에는 `stash`(StashCount > 0) 줄이 있다 — 상단 현황 칩에는 없다.
   계약: 「브랜치」 탭은 왼쪽 브랜치 목록 + 오른쪽 이력(최근 200건 · `MainViewModel.BranchLog.cs`)이다 — 원격에 없는 커밋에 「Push 전」을 달고, 판정은 로컬이 아는 원격 추적 ref 뿐이다.
   계약: 이력의 커밋을 누르면 그 아래에 그 커밋이 바꾼 파일이 뜨고(`ReadCommitFilesAsync` · 병합 커밋은 첫 부모 기준), 파일을 누르면 오른쪽 「변경 내용」에 그 코드가 보인다 — 「변경 내용」의 표시는 `IsDiffShown` 하나가 정하고 변경 파일·커밋 파일 선택은 서로를 푼다.
   ★ 계약: 띠 넷째 묶음의 「Push 취소」(`BulkOperationKind.UndoPush` · `GitService.UndoPushAsync`)는 **올리기 전 내용으로 되돌리는 커밋을 하나 더해 보통 Push 로 올린다** — force push·reset 이 아니라서 올렸던 커밋은 이력에 남는다. 화면이 먼저 묻는다(`OnUndoPushClick`).
@@ -121,9 +131,12 @@
   계약: 「병합」은 고른 브랜치(비면 업로드 브랜치)를 `fetch` 한 뒤 지금 브랜치로 합치고, 「올리기」는 두 벌이다 — 지금(작업) 브랜치를 제 원격 브랜치로, 업로드 브랜치가 다르면 거기에도 `push <remote> HEAD:refs/heads/<업로드>` 한다 — force 없음.
   계약: 업로드 브랜치로 올린 뒤 로컬의 같은 이름 브랜치도 빨리감기로 맞춘다(`GitService.SyncLocalUploadAsync` · `fetch .` 라 원격에 닿지 않는다) — 로컬에 없으면 만들지 않고, 갈라졌으면 그대로 둔다.
   계약: 지금 브랜치가 가져올 브랜치와 같으면 「병합」은 원격의 같은 브랜치(`<remote>/<브랜치>`)를 합친다 — 올리기가 거부된(갈라진) 저장소를 이 단추로 푼다. Pull 은 `--ff-only` 라 갈라지면 못 푼다.
-  계약: 실패를 푸는 단추가 정해진 결과는 `BulkStepResult.NextAction`(`BulkNextAction`)에 그 이름을 싣고, 화면은 같은 이름을 `Nudge.Key` 로 단 단추를 깜빡인다(`Controls/Nudge.cs` · `MainViewModel.NudgeAction`). 다음 일괄 작업을 시작하면 꺼진다.
+  계약: 실패를 푸는 단추가 정해진 결과는 `BulkStepResult.NextAction`(`BulkNextAction`)에 그 이름을 싣고, 화면은 같은 이름을 `Nudge.Key` 로 단 단추를 깜빡인다(Core `Jhj.Core.Wpf` `Shell/Nudge` · `MainViewModel.NudgeAction` — 규격 `JHJ_DEV/000.AGENTS_MD/080.CS앱-화면/080.CS앱-화면-공통.md` §6). 다음 일괄 작업을 시작하면 꺼진다.
   함정: 접힌 단(Collapsed) 위의 덧그림은 WPF 가 지우지 않는다 — `Nudge` 가 단추의 `IsVisibleChanged` 를 따라 테를 함께 숨긴다(2026-10-11 「점검」 화면에 테가 남던 것).
   셋이다 — `merge`(올리기 거부 → 「지금 브랜치로 병합」) · `conflict`(충돌 → 상세 「충돌」 탭, 그 탭을 열면 꺼진다) · `switch`(작업 브랜치가 아님 → 「전환」). 결과가 섞이면 충돌 → 실패 → 건너뜀 차례로 첫 것을 고른다.
+  계약: 넷째 `sync` 는 결과가 아니라 **층이 정한다** — Push 되지 않은 저장소 층(`PushGapLayer`)이 뜨면 「받아서 Merge + Push」를 깜빡이고, 층이 닫히면 뜨기 전 값으로 돌아간다(`ShowPushGap` · `OnIsPushGapOpenChanged`). 예외를 가리는 것보다 받아서 올리는 것이 먼저라서다(2026-10-13 사용자 지시).
+  ★ 계약: **단추 색은 「하는 일」이 정한다** — 낱말이 달라도 같은 일이면 띠·층 어디서든 같은 색이다(`Styles.xaml` 머리). `PushButton`(채운 강조색) = 올리는 일(커밋 + Push · 받아서 Merge + Push · 진행 · 만들어 올리기) ·
+  `MergeButton`(강조색 테두리) = 받아 합치는 일(지금 브랜치로 Merge · 병합 마무리) · `DangerButton` = 취소·버리기. Core `PrimaryButton` 은 그 밖의 적용·만들기에만 남긴다. 층의 「이 저장소만 고르기」는 보통 단추다.
   계약: 지금 브랜치가 작업 브랜치와 다르면 병합·커밋·올리기를 건너뛴다 — 단 작업 브랜치가 그 저장소에(로컬에도 원격 추적 ref 에도) 없으면 막지 않는다(`GitService.NotOnWorkBranchAsync`).
   ★ 계약: 커밋 · Push · 커밋 + Push 는 건너뛰기 전에 **먼저 묻는다** — 그런 저장소를 층(`Views/OffBranchLayer` · `MainViewModel.PushCheck.cs`)에 모아 저장소별로 체크받고, 체크한 것만 `BulkOperationOptions.ConfirmedBranches`(저장소 Id → 확인한 브랜치)로 넘겨 지금 브랜치 그대로 진행한다.
   계약: 체크는 기본이 꺼짐이고 「취소」는 일괄 작업을 통째로 그만둔다. 확인한 뒤 브랜치가 바뀌었으면 다시 막는다. 병합은 묻지 않고 예전처럼 건너뛴다.
@@ -159,8 +172,11 @@
   계약: 건너갈 때는 남아 있던 검색어·거르개를 먼저 푼다(`ResetFilters`) — 겹치면 빈 목록으로 보인다.
 - 계약: 대시보드는 `Views/DashboardView` 한 파일이다 — 통계 카드의 수는 `MainViewModel.Dashboard.cs`, 그림은 `Controls/ChartView`(라이브러리 없이 직접 그린다)가 맡는다.
   표시 방식은 카드 머리 고르개가 바꾸고 **고르는 즉시** `Settings.DashboardChartKinds` 에 남는다. 범주 색은 여덟 고정 — 넘치면 자료 쪽이 「기타」로 접는다.
-  계약: 통계 칸은 일곱(`Slots`)이고 고를 통계는 열다섯이다 — 「UI 편집」 중 카드 제목 자리의 고르개가 바꾸고, 이미 다른 칸에 있으면 맞바꾼다. 자리는 `DashboardChartKinds["slot.<n>"]` 에 즉시 남는다.
-- 계약: 「상태 새로 고침」은 저장소마다 git 을 다섯 번 더 부른다 — 바뀐 것이 있을 때만 `diff HEAD --shortstat`(추가·삭제 줄 수), 늘 `log --since=735.days.ago --format=%cs`(커밋 캘린더 — 가장 긴 기간 2년치)와 `ls-files`(확장자 구성 · 추적 파일 수) · `log --format=%cd%x09%an`(작성자별 · 시간대별 커밋) · `count-objects -v`(.git 용량).
+  계약: 통계 칸은 일곱(`Slots`)이고 고를 통계는 열여섯이다 — 「UI 편집」 중 카드 제목 자리의 고르개가 바꾸고, 이미 다른 칸에 있으면 맞바꾼다. 자리는 `DashboardChartKinds["slot.<n>"]` 에 즉시 남는다.
+  계약: 「그룹별 현황」은 지표 고르개(`GroupChart.Metric` — 상태 · 갱신 파일 · 커밋 · 변경 파일 · 변경 줄 · 추적 파일 · 용량)와 기간(7일~1년)을 갖는다 — 카드·그림이 같은 수를 보고, 「상태」 밖 지표는 값이 큰 그룹부터(`GroupCards`) 놓인다. 「최근 커밋」·「최근 갱신 파일」 카드도 같은 기간 조각을 쓴다. 저장 열쇠는 `<카드>.metric` · `<카드>.range`.
+- 계약: 「상태 새로 고침」은 저장소마다 git 을 일곱 번 더 부른다 — 바뀐 것이 있을 때만 `diff HEAD --shortstat`(추가·삭제 줄 수), 늘 `log --since=735.days.ago --format=%cs`(커밋 캘린더 — 가장 긴 기간 2년치)와 `ls-files`(확장자 구성 · 추적 파일 수) · `log --format=%cd%x09%an`(작성자별 · 시간대별 커밋) · `count-objects -v`(.git 용량) · `log --since=365.days.ago --format=%x1f%cs --name-only`(최근 갱신 파일 — 경로마다 마지막 날·횟수, `RepoRow.RecentFiles`) · `reflog show --all --date=iso-strict`(최근 30일 — `RepoRow.WorkLog`).
+  ★ 계약: 대시보드 「최근 작업」은 **git reflog** 다(`MainViewModel.ActivityLog.cs` 의 `RecentWork` — HEAD 의 커밋·전환·Merge·Pull·Reset, 원격 추적 ref 의 `update by push`, stash, 브랜치 생성) — CLI·다른 도구로 한 일도 보인다.
+  앱이 직접 한 일(`Activity`)은 「시스템 작업 로그」 탭이 보이고 `data\activity.jsonl` 에 남아 다음 실행에 되살아난다(최근 500건). 2026-10-14 전에는 메모리뿐이라 재시작마다 비었다.
   함정: 줄 수는 추적 전 새 파일을 세지 않는다 — 세려면 파일을 다 읽어야 해서 일부러 뺐다. 캘린더는 지금 브랜치의 커밋만, 작성자를 가르지 않고 센다.
 - 계약: 카드 크기는 **「UI 편집」 중에만** 바뀐다 — 나누개(`LayoutSplitter`)는 평소 꺼진 빈 간격이고, 「배치 저장」이 별(*) 비율을 `Settings.DashboardLayout` 에 적는다.
   함정: 격자의 짝수 자리가 카드, 홀수 자리가 나누개다 — 카드를 더하면 `DashboardView.xaml.cs` 의 `Defaults` 칸 수도 함께 고친다(안 맞는 저장값은 버려진다).
@@ -183,6 +199,10 @@
   함정: 이 탭은 `IGitService` 를 거치지 않고 `_gitRunner` 로 git 을 바로 부른다 — 일괄 작업과 겹치지 않게 `IsBusy` 를 함께 쥔다.
 - 계약: 줄마다 `RefreshedAt` 을 찍는다 — 「상태 새로 고침」이 값을, 1분 타이머가 경과 글자(`TouchElapsed`)를 다시 그린다.
 - 계약: 기본 아이콘(`Resources/app-icon.ico`)은 **검은 보라 바탕의 금속 JG 모노그램**이다(`make_jhj_icon.py branch … --style lux --mono JGm --bg obsidian` · 2026-10-12 사용자 선택). 설정 「아이콘」의 선택지(`Services/IconPresets.cs`)는 금속 JG 검은 보라 · 금속 JG 보라 · 금속 J · 「JHJ + 가지」(옛 기본, `app-icon-classic.ico`) · 가지 모양 · 연결 · 그물이다. 더하려면 `.ico` 생성 → csproj `Resource` → `IconPresets.All` → 문구 두 파일 순서다.
+- ★ 함정: 설정에서 아이콘을 골라도 **작업 표시줄 단추는 안 바뀌었다**(2026-10-13) — 시작 메뉴 바로가기가 있으면 Windows 는 창 아이콘이 아니라 바로가기 아이콘을 쓴다.
+  Core `AppIcon.Apply` 가 바로가기의 `IconLocation` 을 함께 맞추고 단추를 다시 만든다(080 §2) — 이 앱에서 따로 할 일은 없다.
+- ★ 계약: 설정 「아이콘」의 선택지 그림은 전부 `make_jhj_icon.py … --uniform large|small` 로 만든 **모든 크기 한 디자인** 이다(2026-10-13 사용자 지시 — 견본·작업 표시줄·Alt+Tab 이 달라 보였다).
+  `large` 가 금속 JG 모노그램 · 금속 JG(검은 보라·보라) · 금속 J · 「JHJ + 가지」, `small` 이 굵은 금 JG(검은 보라·보라) · 굵은 금 J · 「J + 가지」다. 기본 `app-icon.ico` 도 2026-10-14 부터 모든 크기 한 디자인(JGm)이고, 견본(`IconChoicePreviewConverter`)은 32px 판을 보인다.
 - ★ 함정: 아이콘 `.ico` 는 **128 이하를 BMP 로** 적어야 한다 — Pillow 12 의 ICO 저장은 전부 PNG 로 눌러 담고,
   Windows 의 작은 아이콘 경로(작업 표시줄·Alt+Tab)가 그것을 못 읽어 기본 아이콘이 뜬다.
   생성기 `JHJ_DEV/000.AGENTS_MD/070.아이콘/make_jhj_icon.py` 의 `write_ico()` 가 맡는다(2026-10-10 수정).

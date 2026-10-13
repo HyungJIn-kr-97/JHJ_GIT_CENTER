@@ -147,6 +147,12 @@ public sealed record CommitFacts(IReadOnlyDictionary<string, int> Authors, IRead
     public static CommitFacts Empty { get; } = new(new Dictionary<string, int>(), new int[24]);
 }
 
+/// 계약: 최근 커밋이 건드린 파일 하나 — Last 는 마지막으로 바뀐 날(커밋한 날), Touches 는 그 기간에 바뀐 횟수다
+public sealed record FileTouch(string Path, DateOnly Last, int Touches);
+
+/// 계약: reflog 한 줄 — When 은 기록이 생긴 때(커밋한 때가 아니다), Ref 는 「HEAD」·「refs/heads/…」·「refs/remotes/…」·「refs/stash」, Subject 는 git 의 원문이다
+public sealed record ReflogEntry(DateTimeOffset When, string Ref, string Subject, string Sha);
+
 /// <summary>git status --porcelain=v2 한 줄.</summary>
 public sealed class FileChange
 {

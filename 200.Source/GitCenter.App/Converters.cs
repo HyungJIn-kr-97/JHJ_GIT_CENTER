@@ -222,11 +222,12 @@ public sealed class IconChoiceLabelConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
 }
 
-/// <summary>아이콘 선택값 → 견본 그림. 계약: 견본은 40px 로 그려 20 DIP 자리에 넣는다 — 배율 200% 까지 또렷하다.</summary>
+/// <summary>아이콘 선택값 → 견본 그림. 계약: 견본은 32px 판을 20 DIP 자리에 넣는다 — 작업 표시줄·트레이·창 머리가 쓰는 「작은 판」과 같은 그림이어야 고른 것과 보이는 것이 맞는다.</summary>
+/// 함정: 40px 이상 판은 「JHJ + 표지」 디자인이라(070.아이콘-규격 §1) 견본과 실제가 달라 보였다 — 2026-10-13 사용자 지적
 public sealed class IconChoicePreviewConverter : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        Jhj.Core.Wpf.Shell.AppIcon.Preview(value as string, 40);
+        Jhj.Core.Wpf.Shell.AppIcon.Preview(value as string, 32);
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
 }

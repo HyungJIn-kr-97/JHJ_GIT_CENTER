@@ -135,7 +135,8 @@ public sealed partial class MainViewModel
             ("변경", "변경", _all.Count(r => r.Status?.IsDirty ?? false)),
             ("받을 것", "받을 것", _all.Count(r => r.Behind > 0)),
             ("올릴 것", "올릴 것", _all.Count(r => r.Ahead > 0)),
-            ("충돌", "충돌", _all.Count(r => r.Status?.HasConflict ?? false))
+            ("충돌", "충돌", _all.Count(r => r.Status?.HasConflict ?? false)),
+            ("stash", "stash", _all.Count(r => r.Status is { StashCount: > 0 }))
         });
 
         var mine = _all.Count(r => r.IsMine);

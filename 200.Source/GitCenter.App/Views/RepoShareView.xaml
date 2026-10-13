@@ -1,0 +1,122 @@
+<UserControl x:Class="GitCenter.App.Views.RepoShareView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Jhj.Core.Wpf.Localization;assembly=Jhj.Core.Wpf">
+    <!--
+      상세 「설정」 탭 — 고른 저장소의 GitHub 공유 사용자(Collaborators). 로직은 MainViewModel.Share.cs.
+      계약: 로직이 없는 조각이다 — DataContext(MainViewModel)는 MainWindow 에서 물려받는다.
+      계약: 「사용자 추가」 카드와 줄의 「빼기」는 내 저장소(IsShareAdmin)일 때만 보인다 — 남의 저장소는 목록만 본다.
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+        <StackPanel Margin="0,0,8,0">
+
+            <!-- 머리 — 좌표 한 줄 + 새로 읽기 · 브라우저 -->
+            <DockPanel LastChildFill="True" Margin="0,0,0,8">
+                <Button DockPanel.Dock="Right" Content="{loc:Tr '브라우저에서 열기'}" Command="{Binding OpenShareInBrowserCommand}"
+                        IsEnabled="{Binding IsShareAvailable}" Margin="6,0,0,0" Padding="9,4"
+                        ToolTip="{loc:Tr 'GitHub 의 저장소 설정 › Access 화면을 엽니다 — 팀·권한 바꾸기는 거기서 합니다'}" />
+                <Button DockPanel.Dock="Right" Content="{loc:Tr '새로 읽기'}" Command="{Binding LoadShareCommand}"
+                        IsEnabled="{Binding IsShareAvailable}" Padding="9,4" />
+                <TextBlock Text="{Binding ShareCaption}" Style="{StaticResource Caption}" TextWrapping="Wrap"
+                           VerticalAlignment="Center" Margin="2,0,8,0" />
+            </DockPanel>
+
+            <!-- 계정 줄 — 로그인 전이면 여기서 바로 로그인한다(PublishLayer 와 같은 모양) -->
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{loc:Tr 'GitHub 계정'}" Style="{StaticResource Caption}" VerticalAlignment="Center" Width="96" />
+                <TextBlock Grid.Column="1" Text="{Binding GitHub.StatusText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="2" Content="{Binding GitHub.ActionText}" Padding="9,4"
+                        Command="{Binding ToggleGitHubLoginCommand}" />
+            </Grid>
+
+            <TextBlock TextWrapping="Wrap" Margin="2,0,0,8" FontSize="{StaticResource FontSm}"
+                       Foreground="{DynamicResource WarnBrush}" Text="{Binding ShareNote}"
+                       Visibility="{Binding ShareNote, Converter={StaticResource EmptyToVisibility}}" />
+
+            <!-- 사용자 추가 — 내 저장소에만 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10"
+                    Visibility="{Binding IsShareAdmin, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="{loc:Tr '사용자 추가'}" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="{loc:Tr 'GitHub 아이디를 적고 권한을 고릅니다. 상대에게 초대가 가고, 받아들이면 공유됩니다.'}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="120" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Text="{Binding ShareUserInput, UpdateSourceTrigger=PropertyChanged}"
+                                 Tag="{loc:Tr 'GitHub 아이디'}" IsEnabled="{Binding IsShareLoaded}">
+                            <TextBox.InputBindings>
+                                <KeyBinding Key="Return" Command="{Binding AddCollaboratorCommand}" />
+                            </TextBox.InputBindings>
+                        </TextBox>
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding SharePermissions}" SelectedItem="{Binding SharePermission}"
+                                  MinWidth="96" Margin="6,0,0,0" IsEnabled="{Binding IsShareLoaded}"
+                                  ToolTip="{loc:Tr '읽기 = 보기만 · 분류 = 이슈·PR 관리 · 쓰기 = Push · 유지관리 = 설정 일부 · 관리자 = 전부'}" />
+                        <Button Grid.Column="2" Content="{loc:Tr '추가'}" Command="{Binding AddCollaboratorCommand}"
+                                Style="{StaticResource PrimaryButton}" Margin="6,0,0,0" IsEnabled="{Binding IsShareLoaded}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 공유 사용자 목록 -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                <StackPanel>
+                    <DockPanel LastChildFill="False" Margin="0,0,0,6">
+                        <TextBlock Text="{loc:Tr '공유 사용자'}" Style="{StaticResource SectionTitle}" Margin="0" VerticalAlignment="Center" />
+                        <Border Style="{StaticResource Chip}" Margin="8,0,0,0" Padding="6,1" VerticalAlignment="Center"
+                                Visibility="{Binding Collaborators.Count, Converter={StaticResource CountToVisibility}}">
+                            <TextBlock Style="{StaticResource ChipText}" Text="{Binding Collaborators.Count, Mode=OneWay}" />
+                        </Border>
+                    </DockPanel>
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="{loc:Tr '내 저장소가 아니라 목록만 봅니다 — 더하기·빼기는 소유자나 관리자가 합니다.'}"
+                               Visibility="{Binding IsShareReadOnly, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,4"
+                               Text="{loc:Tr '읽는 중'}" Visibility="{Binding IsShareBusy, Converter={StaticResource BoolToVisibility}}" />
+
+                    <ItemsControl ItemsSource="{Binding Collaborators}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SubtleOverlayBrush}" CornerRadius="{StaticResource RadiusSm}"
+                                        Padding="10,6" Margin="0,0,0,6">
+                                    <DockPanel LastChildFill="False">
+                                        <!-- 계약: 「빼기」는 DangerButton — 되돌릴 수는 있지만(다시 초대) 상대의 접근이 바로 끊긴다 -->
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource DangerButton}" Padding="8,2" MinHeight="0"
+                                                FontSize="{StaticResource FontXs}" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                Command="{Binding DataContext.RemoveCollaboratorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" Content="{loc:Tr '빼기'}"
+                                                Visibility="{Binding DataContext.IsShareAdmin, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+                                        <Button DockPanel.Dock="Right" Padding="8,2" MinHeight="0" VerticalAlignment="Center"
+                                                FontSize="{StaticResource FontXs}" Content="{loc:Tr '프로필'}"
+                                                Command="{Binding DataContext.OpenCollaboratorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" />
+                                        <TextBlock Text="{Binding Login}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <Border Style="{StaticResource Chip}" Margin="8,0,0,0" Padding="6,1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding RoleLabel}" Style="{StaticResource ChipText}" />
+                                        </Border>
+                                        <Border Style="{StaticResource Chip}" Margin="4,0,0,0" Padding="6,1" VerticalAlignment="Center"
+                                                Visibility="{Binding IsPending, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="{loc:Tr '초대 중'}" Style="{StaticResource ChipText}"
+                                                       Foreground="{DynamicResource WarnBrush}" />
+                                        </Border>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Style="{StaticResource Micro}" Margin="2,2,0,0" TextWrapping="Wrap"
+                               Text="{loc:Tr '소유자와 조직 팀은 여기 나오지 않습니다 — 직접 공유된 사용자와 보낸 초대만 보입니다.'}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

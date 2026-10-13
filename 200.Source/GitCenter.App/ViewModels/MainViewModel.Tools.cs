@@ -363,7 +363,8 @@ public sealed partial class MainViewModel
             return;
         }
 
-        if (confirm is not null && !JhjMessage.Confirm(confirm))
+        // 계약: 묻고 도는 도구(stash 버리기)는 되돌릴 수 없는 일이다 — 경고 그림 + 빨간 「예」(ConfirmDanger)
+        if (confirm is not null && !JhjMessage.ConfirmDanger(confirm))
         {
             return;
         }

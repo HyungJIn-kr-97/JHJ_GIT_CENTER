@@ -89,6 +89,9 @@ public static class BulkNextAction
 
     /// 원격이 등록돼 있지 않아 건너뛰었다 — 저장소 줄의 「GitHub 에 올리기」로 만들어 연결한다
     public const string Publish = "publish";
+
+    /// Push 되지 않은 저장소 층이 떴다 — 층의 「받아서 Merge + Push」로 받아서 올린다(층이 닫히면 이전 값으로 돌아간다)
+    public const string Sync = "sync";
 }
 
 /// <summary>git 한 번 실행의 결과.</summary>

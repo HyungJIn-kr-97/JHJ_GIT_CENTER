@@ -3,8 +3,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace GitCenter.App.ViewModels;
 
 // 대시보드 통계 카드 — 자료는 이미 읽어 둔 상태(_all)에서만 센다. git 을 더 부르지 않는다.
-// 계약: 카드 이름(state · group · change · top · age · branch · lines · calendar · ext · extrepo · files · active · weekday · author · hour · disk)은 Settings.DashboardChartKinds 의 열쇠다 — 바꾸면 저장값을 잃는다.
+// 계약: 카드 이름(state · group · change · top · age · branch · lines · calendar · ext · extrepo · files · active · touched · weekday · author · hour · disk)은 Settings.DashboardChartKinds 의 열쇠다 — 바꾸면 저장값을 잃는다.
 // 계약: 통계 칸은 일곱(Slots)이고 고를 수 있는 통계는 그보다 많다 — 어느 칸에 무엇을 올렸는지는 같은 사전에 「slot.<자리>」 열쇠로 적힌다.
+// 계약: 기간·지표는 같은 사전에 「<카드>.range」·「<카드>.metric」 열쇠로 적힌다 — 그룹별 현황만 지표(무엇을 셀까)를 갖는다
 // 계약: 칸 크기 저장은 화면(DashboardView)이 한다 — 여기는 「편집 중인가」만 든다.
 public sealed partial class MainViewModel
 {
@@ -26,7 +27,26 @@ public sealed partial class MainViewModel
 
     public ChartCard StateChart { get; } = new("state", "대표 상태 분포", [Donut, Bars, Strip, Gauge, Table]);
 
-    public ChartCard GroupChart { get; } = new("group", "그룹별 현황", [new("cards", "카드"), Bars, Heat, Treemap, Table]);
+    // 계약: 「최근」 기간 조각은 카드 셋(그룹별 현황 · 최근 커밋 · 최근 갱신 파일)이 함께 쓴다 — 갱신 파일은 1년치만 읽어 두므로 2년은 커밋 카드에만 붙는다
+    private static readonly ChartKind[] RecentRanges = [new("7", "7일"), new("30", "30일"), new("90", "90일"), new("365", "1년")];
+
+    // 계약: 최근 갱신 파일을 읽어 두는 날 수 — RecentRanges 의 가장 긴 기간과 같다(MainViewModel.RefreshStatusAsync 가 읽는다)
+    private const int TouchDays = 365;
+
+    // 계약: 그룹별 현황의 지표 열쇠 — 「state」 만 상태 다섯을 쌓고 나머지는 그룹마다 값을 더한다. 바꾸면 저장값을 잃는다
+    private static readonly ChartKind[] GroupMetrics =
+    [
+        new("state", "상태"), new("touched", "갱신 파일"), new("commits", "커밋"), new("changes", "변경 파일"),
+        new("lines", "변경 줄"), new("files", "추적 파일"), new("disk", "용량")
+    ];
+
+    private static readonly HashSet<string> RangedGroupMetrics = new(StringComparer.Ordinal) { "touched", "commits" };
+
+    public ChartCard GroupChart { get; } = new("group", "그룹별 현황", [new("cards", "카드"), Bars, Heat, Treemap, Table],
+        RecentRanges, "30", GroupMetrics, RangedGroupMetrics);
+
+    /// 계약: 그룹 카드의 차례 — 「상태」 지표는 목록(Groups)과 같고, 다른 지표는 값이 큰 그룹부터다. Groups 자체는 건드리지 않는다
+    public System.Collections.ObjectModel.ObservableCollection<GroupNode> GroupCards { get; } = [];
 
     public ChartCard ChangeChart { get; } = new("change", "변경 파일 구성", [Donut, Bars, Columns, Strip, Table]);
 
@@ -49,7 +69,10 @@ public sealed partial class MainViewModel
 
     public ChartCard FilesChart { get; } = new("files", "저장소 크기(추적 파일)", [Bars, Treemap, Columns, Table]);
 
-    public ChartCard ActiveChart { get; } = new("active", "최근 30일 커밋 많은 저장소", [Bars, Columns, Treemap, Table]);
+    public ChartCard ActiveChart { get; } = new("active", "최근 커밋 많은 저장소", [Bars, Columns, Treemap, Table],
+        [.. RecentRanges, new("730", "2년")], "30");
+
+    public ChartCard TouchChart { get; } = new("touched", "최근 갱신 파일 많은 저장소", [Bars, Treemap, Columns, Table], RecentRanges, "30");
 
     public ChartCard WeekdayChart { get; } = new("weekday", "요일별 커밋", [Columns, Bars, Line, Table]);
 
@@ -67,7 +90,7 @@ public sealed partial class MainViewModel
     private ChartCard[] AllCharts =>
     [
         StateChart, ChangeChart, ExtChart, CalendarChart, TopChart, LinesChart, AgeChart,
-        ExtRepoChart, FilesChart, ActiveChart, WeekdayChart, AuthorChart, HourChart, DiskChart, BranchChart
+        ExtRepoChart, FilesChart, ActiveChart, TouchChart, WeekdayChart, AuthorChart, HourChart, DiskChart, BranchChart
     ];
 
     /// 계약: 켜진 동안만 카드 사이 나누개가 보이고 끌린다 — 끄는 것은 화면의 「저장」·「취소」다
@@ -77,7 +100,7 @@ public sealed partial class MainViewModel
     private void InitDashboardCharts()
     {
         // 계약: 저장소·시점이 줄인 카드는 줄의 Tag(repo: · age:)로 「커밋 내역」을 연다 — 캘린더와 같은 명령이 열쇠 머리로 가른다
-        foreach (var card in new[] { CalendarChart, TopChart, LinesChart, AgeChart, ExtRepoChart, FilesChart, ActiveChart, DiskChart })
+        foreach (var card in new[] { CalendarChart, TopChart, LinesChart, AgeChart, ExtRepoChart, FilesChart, ActiveChart, TouchChart, DiskChart })
         {
             card.RowCommand = OpenCommitsCommand;
         }
@@ -87,7 +110,8 @@ public sealed partial class MainViewModel
         foreach (var card in AllCharts.Append(GroupChart))
         {
             card.Restore(Settings.DashboardChartKinds.GetValueOrDefault(card.Key),
-                Settings.DashboardChartKinds.GetValueOrDefault(card.Key + RangeSuffix));
+                Settings.DashboardChartKinds.GetValueOrDefault(card.Key + RangeSuffix),
+                Settings.DashboardChartKinds.GetValueOrDefault(card.Key + MetricSuffix));
             card.KindChanged = changed =>
             {
                 Settings.DashboardChartKinds[changed.Key] = changed.Kind;
@@ -96,12 +120,28 @@ public sealed partial class MainViewModel
                     Settings.DashboardChartKinds[changed.Key + RangeSuffix] = changed.Range;
                 }
 
+                if (changed.Metrics.Count > 0)
+                {
+                    Settings.DashboardChartKinds[changed.Key + MetricSuffix] = changed.Metric;
+                }
+
                 _ = SaveSettingsAsync();
 
                 // 왜: 캘린더는 기간·표시 방식마다 줄의 수와 묶음(날·주·달)이 다르다 — 고를 때 줄을 다시 짠다
                 if (ReferenceEquals(changed, CalendarChart))
                 {
                     RefreshCalendar();
+                }
+
+                // 왜: 기간·지표가 바뀌면 수 자체가 달라진다 — 읽어 둔 것에서 다시 세기만 하므로 git 은 부르지 않는다
+                if (ReferenceEquals(changed, GroupChart))
+                {
+                    RefreshGroupChart();
+                }
+
+                if (ReferenceEquals(changed, ActiveChart) || ReferenceEquals(changed, TouchChart))
+                {
+                    RefreshRecentCharts();
                 }
             };
         }
@@ -165,10 +205,7 @@ public sealed partial class MainViewModel
         StateChart.Data = new ChartData([],
             [.. States.Select(s => new ChartRow(s.Label, _all.Count(r => r.Severity == s.Severity), s.Tone))]);
 
-        GroupChart.Data = new ChartData(
-            [.. States.Select(s => new ChartSeries(s.Label, s.Tone))],
-            [.. Sorted(_all).Where(r => r.GroupNode is not null).GroupBy(r => r.GroupNode!)
-                .Select(g => new ChartRow(g.Key.Label, [.. States.Select(s => (double)g.Count(r => r.Severity == s.Severity))]))]);
+        RefreshGroupChart();
 
         var read = _all.Where(r => r.Status is not null).ToList();
         ChangeChart.Data = new ChartData([],
@@ -266,15 +303,128 @@ public sealed partial class MainViewModel
         FilesChart.Caption = files == 0 ? string.Empty : $"추적 파일 {files:N0}개";
     }
 
+    // 계약: 기간 열쇠(날 수)를 「오늘 포함 n 일」의 첫날로 바꾼다 — 30 이면 29일 전부터다
+    private static DateOnly Since(string range) =>
+        DateOnly.FromDateTime(DateTime.Now).AddDays(1 - int.Parse(range, System.Globalization.CultureInfo.InvariantCulture));
+
+    private static string RangeLabel(ChartCard card) => card.Ranges.FirstOrDefault(r => r.Key == card.Range)?.Label ?? card.Range;
+
+    private static int CommitCount(RepoRow row, DateOnly since) => row.CommitDays.Count(d => d >= since);
+
+    private static int TouchedCount(RepoRow row, DateOnly since) => row.RecentFiles.Count(f => f.Last >= since);
+
+    private static string FileName(string path) => path[(path.LastIndexOf('/') + 1)..];
+
+    /// 계약: 그룹 카드와 그림이 같은 수를 본다 — 「상태」는 상태 다섯을 쌓고, 나머지 지표는 그룹의 저장소 값을 더해 큰 그룹부터 놓는다
+    private void RefreshGroupChart()
+    {
+        var members = _all.Where(r => r.GroupNode is not null).ToLookup(r => r.GroupNode!);
+        var metric = GroupChart.Metric;
+
+        if (metric == "state")
+        {
+            GroupChart.Data = new ChartData(
+                [.. States.Select(s => new ChartSeries(s.Label, s.Tone))],
+                [.. Groups.Select(g => new ChartRow(g.Label, [.. States.Select(s => (double)members[g].Count(r => r.Severity == s.Severity))]))]);
+            GroupChart.Caption = string.Empty;
+            FillGroupCards(Groups);
+            return;
+        }
+
+        var since = Since(GroupChart.Range);
+
+        // 계약: 지표마다 (계열, 저장소 하나의 값들, 단위, 수 형식)이다 — 계열이 둘 이상인 지표(변경 파일 · 변경 줄)는 쌓인 막대가 된다
+        (ChartSeries[] Series, Func<RepoRow, double[]> Of, string Unit, string Format) spec = metric switch
+        {
+            "touched" => ([new ChartSeries("갱신 파일")], r => [TouchedCount(r, since)], "개", "N0"),
+            "commits" => ([new ChartSeries("커밋")], r => [CommitCount(r, since)], "건", "N0"),
+            "changes" => ([new ChartSeries("스테이지"), new ChartSeries("수정"), new ChartSeries("새 파일"), new ChartSeries("충돌")],
+                r => r.Status is null ? [0, 0, 0, 0] : [r.Status.Staged, r.Status.Unstaged, r.Status.Untracked, r.Status.Conflicted], "개", "N0"),
+            "lines" => ([new ChartSeries("추가", "깨끗함"), new ChartSeries("삭제", "충돌")],
+                r => r.Status is null ? [0, 0] : [r.Status.Insertions, r.Status.Deletions], "줄", "N0"),
+            "files" => ([new ChartSeries("추적 파일")], r => [r.FileExtensions.Values.Sum()], "개", "N0"),
+            _ => ([new ChartSeries("용량(MB)")], r => [r.ObjectSizeKib / 1024d], " MB", "N1")
+        };
+
+        var rows = Groups.Select(node =>
+        {
+            var values = new double[spec.Series.Length];
+            var best = (Name: string.Empty, Total: 0d);
+            foreach (var repo in members[node])
+            {
+                var one = spec.Of(repo);
+                for (var i = 0; i < values.Length; i++)
+                {
+                    values[i] += one[i];
+                }
+
+                var total = one.Sum();
+                if (total > best.Total)
+                {
+                    best = (repo.Name, total);
+                }
+            }
+
+            var note = best.Total > 0 ? $"가장 많은 저장소 {best.Name} {best.Total.ToString(spec.Format)}{spec.Unit}" : string.Empty;
+            return (Node: node, Row: new ChartRow(node.Label, values, Note: note));
+        }).OrderByDescending(x => x.Row.Total).ThenBy(x => x.Node.Label, StringComparer.Ordinal).ToList();
+
+        var max = rows.Count == 0 ? 0 : rows.Max(x => x.Row.Total);
+        foreach (var (node, row) in rows)
+        {
+            node.SetMetric(row.Total, max, $"{row.Total.ToString(spec.Format)}{spec.Unit}", row.Note);
+        }
+
+        GroupChart.Data = new ChartData(spec.Series, [.. rows.Select(x => x.Row)], Mono: spec.Series.Length == 1);
+        var sum = rows.Sum(x => x.Row.Total);
+        var span = RangedGroupMetrics.Contains(metric) ? $"{RangeLabel(GroupChart)} · " : string.Empty;
+        GroupChart.Caption = $"{span}합계 {sum.ToString(spec.Format)}{spec.Unit}";
+        FillGroupCards(rows.Select(x => x.Node));
+    }
+
+    private void FillGroupCards(IEnumerable<GroupNode> order)
+    {
+        var list = order.ToList();
+        if (list.SequenceEqual(GroupCards))
+        {
+            return;
+        }
+
+        GroupCards.Clear();
+        foreach (var node in list)
+        {
+            GroupCards.Add(node);
+        }
+    }
+
+    /// 계약: 「최근」 두 카드는 각자의 기간 고르개로 센다 — 커밋은 2년치(CommitDays)에서, 갱신 파일은 1년치(RecentFiles)에서 자른다
+    private void RefreshRecentCharts()
+    {
+        var since = Since(ActiveChart.Range);
+        ActiveChart.Data = new ChartData([],
+            [.. _all.Select(r => new ChartRow(r.Name, [CommitCount(r, since)], Tag: RepoTag + r.Id))
+                .Where(row => row.Total > 0).OrderByDescending(row => row.Total).Take(8)], Mono: true);
+        var recent = _all.Sum(r => CommitCount(r, since));
+        ActiveChart.Caption = recent == 0 ? string.Empty : $"{RangeLabel(ActiveChart)} {recent:N0}건";
+
+        var touchSince = Since(TouchChart.Range);
+        var touched = _all.Select(r => (Row: r, Files: r.RecentFiles.Where(f => f.Last >= touchSince).ToList()))
+            .Where(x => x.Files.Count > 0)
+            .OrderByDescending(x => x.Files.Count).ThenBy(x => x.Row.Name, StringComparer.Ordinal).ToList();
+
+        // 계약: 말풍선 둘째 줄은 그 저장소에서 가장 자주 바뀐 파일 셋이다 — 경로는 파일 이름만 남긴다
+        TouchChart.Data = new ChartData([],
+            [.. touched.Take(8).Select(x => new ChartRow(x.Row.Name, [x.Files.Count],
+                Note: string.Join(" · ", x.Files.OrderByDescending(f => f.Touches).ThenByDescending(f => f.Last).Take(3).Select(f => $"{FileName(f.Path)} {f.Touches}회")),
+                Tag: RepoTag + x.Row.Id))], Mono: true);
+        var files = touched.Sum(x => x.Files.Count);
+        TouchChart.Caption = files == 0 ? string.Empty : $"{RangeLabel(TouchChart)} {files:N0}개 · 저장소 {touched.Count}";
+    }
+
     /// 계약: 이미 읽어 둔 커밋 날짜(CommitDays · 최근 2년)만 센다 — 지금 브랜치의 커밋이고 작성자를 가르지 않는다
     private void RefreshCommitCharts()
     {
-        var since = DateOnly.FromDateTime(DateTime.Now).AddDays(-29);
-        ActiveChart.Data = new ChartData([],
-            [.. _all.Select(r => new ChartRow(r.Name, [r.CommitDays.Count(d => d >= since)], Tag: RepoTag + r.Id))
-                .Where(row => row.Total > 0).OrderByDescending(row => row.Total).Take(8)], Mono: true);
-        var recent = _all.Sum(r => r.CommitDays.Count(d => d >= since));
-        ActiveChart.Caption = recent == 0 ? string.Empty : $"{recent:N0}건";
+        RefreshRecentCharts();
 
         // 계약: 월요일부터 센다 — 커밋 캘린더의 줄 차례와 같다
         DayOfWeek[] week = [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday];
@@ -321,8 +471,10 @@ public sealed partial class MainViewModel
     // 계약: 가장 긴 기간(2년 = 105주)을 채우는 날 수다 — ReadCommitDaysAsync 와 캘린더가 같은 값을 쓴다
     private const int CalendarDays = 735;
 
-    // 계약: 기간은 Settings.DashboardChartKinds 에 「카드 이름 + 이 꼬리」 열쇠로 함께 적힌다
+    // 계약: 기간·지표는 Settings.DashboardChartKinds 에 「카드 이름 + 이 꼬리」 열쇠로 함께 적힌다
     private const string RangeSuffix = ".range";
+
+    private const string MetricSuffix = ".metric";
 
     /// 계약: 날마다 모든 저장소의 커밋을 더한다 — 누가 넣었는지는 가르지 않고, 지금 브랜치에 있는 것만 센다
     private void RefreshCalendar()

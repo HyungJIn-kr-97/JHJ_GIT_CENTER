@@ -1,10 +1,12 @@
 using GitCenter.Application.Abstractions;
 using GitCenter.Core.Models;
+using GitCenter.Infrastructure.Tools;
 
 namespace GitCenter.Infrastructure.Git;
 
 /// <summary>git 실행기. 환경을 고정해 자격 증명 창이 뜨지 않게 한다.</summary>
 /// 함정: GIT_TERMINAL_PROMPT 를 켜 두면 인증이 필요한 원격에서 창이 떠 앱이 통째로 멈춘다.
+/// 계약: git 의 자리는 ToolLocator 가 정한다 — PATH 에 없어도 알려진 설치 폴더(설치 파일이 winget 으로 깐 자리)에서 찾는다.
 public sealed class GitRunner : IGitRunner
 {
     private static readonly Dictionary<string, string> FixedEnvironment = new()
@@ -32,7 +34,7 @@ public sealed class GitRunner : IGitRunner
         full.AddRange(args);
 
         var result = await ProcessRunner.RunAsync(
-            "git",
+            ToolLocator.Git,
             full,
             workingDirectory,
             timeoutSeconds ?? 120,
@@ -55,7 +57,7 @@ public sealed class GitRunner : IGitRunner
         try
         {
             var result = ProcessRunner
-                .RunAsync("git", ["--version"], null, 15, FixedEnvironment, CancellationToken.None)
+                .RunAsync(ToolLocator.Git, ["--version"], null, 15, FixedEnvironment, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
             return result.ExitCode == 0 ? result.StdOut.Trim() : null;

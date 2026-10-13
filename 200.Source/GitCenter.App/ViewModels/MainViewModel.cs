@@ -47,7 +47,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         _settingsStore = settingsStore;
         GitHub = gitHub;
-        GitHub.ReadCached();
+        _ = GitHub.ResolveLocalAsync(CancellationToken.None);
         _registry = registry;
         _git = git;
         _runner = runner;
@@ -61,6 +61,7 @@ public sealed partial class MainViewModel : ObservableObject
         _isSummaryView = settings.RepoSummaryView;
         ExcludeText = string.Join('\n', settings.CommonExcludes);
         InitDashboardCharts();
+        LoadActivityLog();
 
         // 계약: 목록은 RepoRow.GroupNode 객체로 묶인다 — 그룹 머리가 그 객체(접힘·건수)를 그대로 그린다
         CollectionViewSource.GetDefaultView(Rows).GroupDescriptions
@@ -354,16 +355,22 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string? _sourceNotes;
 
-    // 계약: 0 변경 파일 · 1 브랜치 · 2 충돌 — 충돌이 있으면 그 탭을 먼저 연다
+    // 계약: 0 변경 파일 · 1 브랜치 · 2 충돌 · 3 상태 · 4 작업 · 5 설정(ShareTabIndex) — 충돌이 있으면 그 탭을 먼저 연다
     [ObservableProperty]
     private int _detailTabIndex;
 
     // 왜: 「충돌」 탭을 열었으면 가리킬 일이 끝났다 — 탭이 열린 뒤에도 깜빡이면 무엇을 더 하라는지 모른다
+    // 계약: 「설정」 탭은 열리는 때 한 번 GitHub 를 읽는다(MainViewModel.Share.cs) — 탭을 누른 것이 사용자의 지시다
     partial void OnDetailTabIndexChanged(int value)
     {
         if (value == 2 && NudgeAction == BulkNextAction.Conflict)
         {
             NudgeAction = string.Empty;
+        }
+
+        if (value == ShareTabIndex)
+        {
+            OnShareTabOpened();
         }
     }
 
@@ -572,7 +579,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     public string GitVersionText => _gitRunner.IsGitAvailable
         ? _gitRunner.GitVersion ?? string.Empty
-        : "git 을 찾지 못했습니다 — PATH 에 git 이 있어야 합니다.";
+        : Loc.T("git 을 찾지 못했습니다 — 설치 파일을 다시 돌려 「필수 도구」의 Git 을 켜거나 winget install Git.Git 으로 설치한 뒤 앱을 다시 띄워 주십시오.");
 
     public bool IsGitMissing => !_gitRunner.IsGitAvailable;
 
@@ -686,6 +693,8 @@ public sealed partial class MainViewModel : ObservableObject
                 row.CommitDays = await _git.ReadCommitDaysAsync(row.Entry, CalendarDays, CancellationToken.None).ConfigureAwait(true);
                 row.FileExtensions = await _git.ReadFileExtensionsAsync(row.Entry, CancellationToken.None).ConfigureAwait(true);
                 row.CommitFacts = await _git.ReadCommitFactsAsync(row.Entry, CalendarDays, CancellationToken.None).ConfigureAwait(true);
+                row.RecentFiles = await _git.ReadFileTouchesAsync(row.Entry, TouchDays, CancellationToken.None).ConfigureAwait(true);
+                row.WorkLog = await _git.ReadReflogAsync(row.Entry, WorkDays, CancellationToken.None).ConfigureAwait(true);
                 row.ObjectSizeKib = await _git.ReadObjectSizeAsync(row.Entry, CancellationToken.None).ConfigureAwait(true);
                 // 계약: 줄마다 「언제 읽었나」를 남긴다 — 목록에 경과로, 상세에 정확한 시각으로 보인다
                 row.RefreshedAt = DateTimeOffset.Now;
@@ -840,6 +849,7 @@ public sealed partial class MainViewModel : ObservableObject
         "받을 것" => row.Behind > 0,
         "올릴 것" => row.Ahead > 0,
         "충돌" => row.Status?.HasConflict ?? false,
+        "stash" => row.Status is { StashCount: > 0 },
         _ => true
     };
 
@@ -972,6 +982,7 @@ public sealed partial class MainViewModel : ObservableObject
             RecentCommits.Add(row);
         }
 
+        RefreshRecentWork();
         RefreshCharts();
     }
 
@@ -987,6 +998,7 @@ public sealed partial class MainViewModel : ObservableObject
         Conflicts.Clear();
         StatusReasons.Clear();
         Stashes.Clear();
+        ResetShare(row);
 
         if (row.Entry.Health != RepoHealth.Ok || !_gitRunner.IsGitAvailable)
         {
@@ -1018,6 +1030,7 @@ public sealed partial class MainViewModel : ObservableObject
             DetailTabIndex = 0;
 
             await LoadStatusTabAsync(row, generation).ConfigureAwait(true);
+            await PrepareShareAsync(row, generation).ConfigureAwait(true);
 
             if (row.Status?.HasConflict ?? false)
             {
@@ -1418,6 +1431,7 @@ public sealed partial class MainViewModel : ObservableObject
         LastActivity = entry;
         Activity.Insert(0, entry);
         TrimActivity();
+        _ = AppendActivityLogAsync(entry);
         if (entry.Outcome is StepOutcome.Failed)
         {
             HasReportableError = true;
@@ -1563,7 +1577,8 @@ public sealed class ActivityEntry
 
     public string Detail { get; init; } = string.Empty;
 
-    public string TimeText => When.ToString("HH:mm:ss");
+    // 왜: 되살린 기록과 git 기록은 어제 것일 수 있다 — 오늘이 아니면 날짜를 앞에 붙인다
+    public string TimeText => When.LocalDateTime.Date == DateTime.Today ? When.ToString("HH:mm:ss") : When.ToString("MM-dd HH:mm");
 
     public bool HasDetail => Detail.Trim().Length > 0;
 

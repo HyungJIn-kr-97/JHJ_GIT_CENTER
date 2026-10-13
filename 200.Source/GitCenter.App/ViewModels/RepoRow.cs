@@ -164,6 +164,12 @@ public sealed partial class RepoRow : ObservableObject
     /// 계약: .git 객체 크기(KiB) — 「상태 새로 고침」이 채운다
     public long ObjectSizeKib { get; set; }
 
+    /// 계약: 최근 1년(TouchDays) 커밋이 건드린 파일 — 「상태 새로 고침」이 채우고 대시보드의 「갱신 파일」 통계가 기간으로 잘라 센다
+    public IReadOnlyList<FileTouch> RecentFiles { get; set; } = [];
+
+    /// 계약: 최근 30일(WorkDays) reflog — 「상태 새로 고침」이 채우고 대시보드 「최근 작업」이 모은다
+    public IReadOnlyList<ReflogEntry> WorkLog { get; set; } = [];
+
     public int Ahead => Status?.Ahead ?? 0;
 
     public int Behind => Status?.Behind ?? 0;

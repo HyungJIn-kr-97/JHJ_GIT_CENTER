@@ -7,7 +7,11 @@ namespace GitCenter.App.ViewModels;
 // 계약: 「cards」 는 ChartView 가 아니라 DashboardView 의 XAML 이 그린다(그룹 카드).
 
 /// <summary>카드 머리의 표시 방식 단추 하나.</summary>
-public sealed record ChartKind(string Key, string Label);
+public sealed record ChartKind(string Key, string Label)
+{
+    // 함정: 이 앱의 ComboBox 틀은 고른 줄을 ToString 으로 그린다 — 안 덮으면 「ChartKind { Key = … }」 가 찍힌다
+    public override string ToString() => Label;
+}
 
 /// 계약: Tone 은 StateBrushConverter 가 아는 상태 낱말이다 — 비면 범주 색을 자리 순서대로 받는다
 public sealed record ChartSeries(string Name, string Tone = "");
@@ -33,8 +37,12 @@ public sealed record ChartData(IReadOnlyList<ChartSeries> Series, IReadOnlyList<
 
 /// <summary>통계 카드 하나 — 제목 · 고를 수 있는 표시 방식 · 지금 자료.</summary>
 public sealed partial class ChartCard(string key, string title, IReadOnlyList<ChartKind> kinds,
-    IReadOnlyList<ChartKind>? ranges = null, string? defaultRange = null) : ObservableObject
+    IReadOnlyList<ChartKind>? ranges = null, string? defaultRange = null,
+    IReadOnlyList<ChartKind>? metrics = null, IReadOnlySet<string>? rangedMetrics = null) : ObservableObject
 {
+    // 계약: 기간이 뜻을 갖는 지표의 열쇠 — 비면 모든 지표에 기간 고르개가 보인다
+    private readonly IReadOnlySet<string> _rangedMetrics = rangedMetrics ?? new HashSet<string>(StringComparer.Ordinal);
+
     public string Key { get; } = key;
 
     public string Title { get; } = title;
@@ -43,6 +51,17 @@ public sealed partial class ChartCard(string key, string title, IReadOnlyList<Ch
 
     /// 계약: 기간 고르개의 조각들 — 비면 고르개가 보이지 않는다(기간이 없는 카드)
     public IReadOnlyList<ChartKind> Ranges { get; } = ranges ?? [];
+
+    /// 계약: 「무엇을 셀까」 고르개의 조각들 — 비면 고르개가 보이지 않는다(값이 하나뿐인 카드)
+    public IReadOnlyList<ChartKind> Metrics { get; } = metrics ?? [];
+
+    /// 계약: 지표와 표시 방식·기간은 서로 묶이지 않는다 — 기간이 뜻 없는 지표에서는 UsesRange 가 고르개만 숨긴다
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UsesRange))]
+    private string _metric = metrics is { Count: > 0 } ? metrics[0].Key : string.Empty;
+
+    /// 계약: 기간 고르개를 보일지 — 기간이 없는 카드와 기간이 뜻 없는 지표(파일 수 · 용량)에서는 숨긴다
+    public bool UsesRange => Ranges.Count > 0 && (_rangedMetrics.Count == 0 || _rangedMetrics.Contains(Metric));
 
     [ObservableProperty]
     private string _kind = kinds[0].Key;
@@ -90,8 +109,10 @@ public sealed partial class ChartCard(string key, string title, IReadOnlyList<Ch
 
     partial void OnRangeChanged(string value) => KindChanged?.Invoke(this);
 
-    /// <summary>저장된 값을 되살린다 — 이 카드가 모르는 낱말이면 표시 방식은 첫 조각, 기간은 기본값으로 둔다.</summary>
-    public void Restore(string? saved, string? savedRange = null)
+    partial void OnMetricChanged(string value) => KindChanged?.Invoke(this);
+
+    /// <summary>저장된 값을 되살린다 — 이 카드가 모르는 낱말이면 표시 방식은 첫 조각, 기간·지표는 기본값으로 둔다.</summary>
+    public void Restore(string? saved, string? savedRange = null, string? savedMetric = null)
     {
         var hook = KindChanged;
         KindChanged = null;
@@ -99,6 +120,11 @@ public sealed partial class ChartCard(string key, string title, IReadOnlyList<Ch
         if (Ranges.Any(r => r.Key == savedRange))
         {
             Range = savedRange!;
+        }
+
+        if (Metrics.Any(m => m.Key == savedMetric))
+        {
+            Metric = savedMetric!;
         }
 
         KindChanged = hook;

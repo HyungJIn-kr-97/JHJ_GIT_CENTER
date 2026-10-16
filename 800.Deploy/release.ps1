@@ -172,11 +172,25 @@ Step "4/5 빌드"
 $devApp = Get-Process $appProcessNames -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -and $repo -and $_.Path.StartsWith($repo, [StringComparison]::OrdinalIgnoreCase) }
 $devAppWasRunning = $null -ne $devApp
-if (-not $KeepApp) { $devApp | Stop-Process -Force }
 
-try { & (Join-Path $PSScriptRoot "publish.ps1") -Platform x64 -BuildDate $date -KeepApp:$KeepApp }
-catch { Fail "빌드 실패: $($_.Exception.Message)" }
-if ($LASTEXITCODE -ne 0) { Fail "빌드 실패. 위 메시지를 확인해 주십시오." }
+# 계약: 빌드 동안만 PC 전체 잠금 Local\JHJ_AppDeploy 를 쥔다 - JHJ 앱들이 Core 의 obj·bin 을 함께 써서 두 빌드가 겹치면 서로의 산출물을 덮는다
+# 왜: 버전·커밋·GitHub 업로드는 저장소가 달라 겹쳐도 된다 - 앱의 「배포하기」든 Release.bat 직접 실행이든 여기서만 차례를 기다린다
+# 함정: 먼저 쥔 쪽이 죽으면 AbandonedMutexException 으로 넘어온다 - 그것도 쥔 것이다
+$buildLock = New-Object Threading.Mutex($false, 'Local\JHJ_AppDeploy')
+$lockHeld = $false
+try { $lockHeld = $buildLock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $lockHeld = $true }
+if (-not $lockHeld) {
+    Write-Host "다른 JHJ 앱이 빌드 중입니다. 끝나기를 기다립니다(최대 15분)..." -ForegroundColor Yellow
+    try { $lockHeld = $buildLock.WaitOne([TimeSpan]::FromMinutes(15)) } catch [Threading.AbandonedMutexException] { $lockHeld = $true }
+    if (-not $lockHeld) { Fail "15분을 기다려도 다른 JHJ 앱의 빌드가 끝나지 않았습니다." }
+}
+try {
+    if (-not $KeepApp) { $devApp | Stop-Process -Force }
+    try { & (Join-Path $PSScriptRoot "publish.ps1") -Platform x64 -BuildDate $date -KeepApp:$KeepApp }
+    catch { Fail "빌드 실패: $($_.Exception.Message)" }
+    if ($LASTEXITCODE -ne 0) { Fail "빌드 실패. 위 메시지를 확인해 주십시오." }
+}
+finally { $buildLock.ReleaseMutex(); $buildLock.Dispose() }
 
 $assets = @(
     (Join-Path $out "$package-win-x64-$tag.zip"),

@@ -996,6 +996,8 @@ public sealed partial class MainViewModel : ObservableObject
         SetChanges([]);
         Branches.Clear();
         Conflicts.Clear();
+        ForgetPicksUnless(row.Id);
+        SetIncoming(null);
         StatusReasons.Clear();
         Stashes.Clear();
         ResetShare(row);
@@ -1045,8 +1047,18 @@ public sealed partial class MainViewModel : ObservableObject
                     Conflicts.Add(new ConflictFileVm(conflict));
                 }
 
+                RebuildConflictItems();
+
                 // 왜: 충돌은 다른 무엇보다 먼저 봐야 한다 — 사용자가 탭을 찾아 누르게 두지 않는다
                 DetailTabIndex = 2;
+            }
+            else
+            {
+                await LoadIncomingAsync(row, generation).ConfigureAwait(true);
+                if (generation == _detailGeneration && IncomingConflictCount > 0)
+                {
+                    DetailTabIndex = 2;
+                }
             }
 
             OnPropertyChanged(nameof(ConflictOverview));

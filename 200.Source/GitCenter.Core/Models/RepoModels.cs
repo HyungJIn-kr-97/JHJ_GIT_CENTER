@@ -207,6 +207,59 @@ public sealed class ConflictFile
     public bool HasBase { get; set; }
 }
 
+/// <summary>받기 전에 미리 본 파일 하나가 병합에서 어떻게 되나.</summary>
+public enum IncomingFileKind
+{
+    /// 받으면 충돌한다 — 「충돌」 탭에서 구간을 골라야 한다
+    Conflict,
+
+    /// 커밋하지 않은 변경과 겹치지만 git 이 저절로 합친다
+    AutoMerge,
+
+    /// 추적 전 파일과 같은 이름의 파일이 들어온다 — git 이 덮어쓰지 않으려고 멈춘다
+    Untracked
+}
+
+/// <summary>받기 미리 보기의 파일 한 줄.</summary>
+public sealed class IncomingPreviewFile
+{
+    public required string Path { get; init; }
+
+    public IncomingFileKind Kind { get; init; }
+
+    /// 계약: 커밋하지 않은 변경이 있는 파일인가 — false 인 충돌은 이미 커밋한(올리지 않은) 변경과 부딪힌 것이다
+    public bool IsUncommitted { get; init; }
+
+    /// 계약: git 이 적은 충돌 종류(content · modify/delete · add/add 등) — 없으면 빈 값
+    public string Reason { get; init; } = string.Empty;
+
+    /// 계약: 충돌일 때 미리 합친 결과를 구간으로 나눈 것 — 파일에 쓰지 않은 가상의 결과다
+    public ConflictFile? Content { get; init; }
+}
+
+/// <summary>지금 브랜치에 들어올 것을 합쳐 보면 무엇이 충돌하나 — 작업 트리·브랜치를 건드리지 않고 계산한다.</summary>
+public sealed class IncomingPreview
+{
+    /// 계약: 들어올 쪽(origin/main 꼴) — 마지막 Fetch 기준이다
+    public required string Reference { get; init; }
+
+    public int Behind { get; init; }
+
+    public List<IncomingPreviewFile> Files { get; init; } = [];
+
+    /// 계약: 미리 보기를 못 했을 때의 이유 — 차 있으면 Files 는 믿지 않는다
+    public string? Error { get; init; }
+
+    public int ConflictCount => Files.Count(f => f.Kind == IncomingFileKind.Conflict);
+
+    public int AutoMergeCount => Files.Count(f => f.Kind == IncomingFileKind.AutoMerge);
+
+    public int UntrackedCount => Files.Count(f => f.Kind == IncomingFileKind.Untracked);
+
+    /// 계약: 커밋하지 않은 변경 때문에 git 이 받기를 거부하나 — 겹친 파일이 하나라도 있으면 참이다
+    public bool BlocksPull => Files.Any(f => f.IsUncommitted || f.Kind == IncomingFileKind.Untracked);
+}
+
 /// <summary>충돌 구간 하나를 어떻게 풀지.</summary>
 /// 계약: Merged 는 공통 조상에서 양쪽이 고친 줄을 합친 것이다 — ConflictResolver.TryMergeLines 가 될 때만 고를 수 있다
 public enum ConflictChoice

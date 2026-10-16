@@ -93,7 +93,10 @@
 - 계약: 오른쪽 단은 **「변경 내용」·「작업 로그」·「시스템 작업 로그」·「시스템 오류」 네 탭**이다. 가운데에서 변경 파일을 고르면 `SelectedChange` 가 바뀌고 0번 탭으로 옮긴다.
   계약: 로그 탭 셋은 몸통(`ActivityLogPane`)과 거르개(`ViewModels/ActivityLogView` — 아래 줄의 분류 알약 + 검색)를 함께 쓴다. 「시스템 오류」는 전체 기록에서 실패·충돌만 남긴 보기다 — 원본 목록은 `Activity` 하나다.
   함정: 분류 알약은 `IsChecked` 양방향 바인딩이다 — Command 로 묶으면 UI 자동화·화면 낭독기의 토글이 분류를 못 바꾼다(2026-10-12 실측).
-  계약: 「병합」은 git 을 부르기 전에 커밋하지 않은 변경과 들어올 파일(`HEAD...<ref>`)이 겹치는지 본다(`GitService.OverlapWithIncomingAsync`) — 겹치면 실패로 끝내고 겹친 파일을 `Detail` 에 싣는다.
+  계약: 「병합」·「Pull」(자동 stash 꺼짐)은 git 을 부르기 전에 커밋하지 않은 변경과 들어올 파일(`HEAD...<ref>`)이 겹치는지 본다(`GitService.OverlapWithIncomingAsync`) — 겹치면 실패로 끝내고 받기 미리 보기의 충돌·자동 병합·추적 전 수를 문구에, 파일별 판정을 `Detail` 에 싣고 `conflict` 를 깜빡인다.
+  ★ 계약: 받기 미리 보기(`GitService.PreviewIncomingAsync` · `MainViewModel.Incoming.cs` · 충돌 탭 `IncomingPanel`)는 `stash create`(작업 트리 스냅숏 — stash 목록·파일은 그대로) + `merge-tree --write-tree`(git 2.38+)로 **받기 전에** 합쳐 보고, 충돌 구간과 처리 순서를 보인다 — 받을 것이 있고 병합 중이 아닌 저장소를 고를 때 계산하며 원격에는 닿지 않는다(마지막 Fetch 기준).
+  계약: 충돌 탭은 두 단이다 — 왼쪽 항목 목록(`ConflictItems` — 실제 충돌, 없으면 미리 보기의 충돌)과 오른쪽 고른 항목 하나(`SelectedConflict` · 「다음 항목」). 충돌 아닌 겹침(자동 병합 · 추적 전)은 왼쪽 아래에 이름만 보인다.
+  계약: 미리 보기에서도 구간을 고를 수 있고 파일은 안 바뀐다 — 고른 것은 저장소별로 기억했다가(`_pickedHunks`, 양쪽 내용으로 같은 구간을 찾는다) 「커밋하고 받기」(겹칠 때만 띠의 커밋 제목으로 커밋 → 원격의 같은 브랜치 Merge) 뒤 실제 충돌에 이어 붙인다. 적용은 여전히 「이 파일 적용」·「고른 것 모두 적용」이다. 추적 전 파일은 스냅숏에 안 들어가 `Untracked` 로 따로 센다.
   계약: 가운데 상세 단은 탭 여섯이다 — 「변경 파일」·「브랜치」·「충돌」·「상태」·「작업」·「설정」(`MainViewModel.ShareTabIndex` = 5).
   ★ 계약: 「설정」 탭(`Views/RepoShareView` · `MainViewModel.Share.cs` · `Services/GitHubAccount.Share.cs`)은 그 저장소의 GitHub 공유 사용자(Collaborators)다 — 전부 `gh api`(repos/{owner}/{repo} · /collaborators?affiliation=direct · /invitations)이고 토큰은 gh 가 쥔다.
   계약: 「내 저장소」는 `permissions.admin` 이다 — 원격 주소의 소유자 이름과 로그인을 견주지 않는다. 참일 때만 「추가」(`PUT …/collaborators/{login}` · 기본 권한 push)와 줄의 「빼기」(`DELETE` — 초대 중이면 `/invitations/{id}`)가 보이고, 아니면 목록만 본다.

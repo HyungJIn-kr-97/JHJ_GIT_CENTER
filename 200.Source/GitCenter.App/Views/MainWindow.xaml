@@ -777,6 +777,17 @@
                                            Foreground="{DynamicResource TextSecondaryBrush}" />
                             </StackPanel>
                         </Button>
+                        <!-- 계약: 고른 것과 무관한 일이라 금 뒤에 따로 둔다 - 층은 AddRepoLayer -->
+                        <Border Style="{StaticResource VDivider}" Height="18" Margin="7,0,7,4" />
+                        <Button x:Name="AddRepoButton" Style="{StaticResource GhostButton}" Command="{Binding OpenAddRepoCommand}"
+                                Margin="0,0,0,4" ToolTip="{loc:Tr '폴더를 훑어 목록에 없는 git 저장소를 골라 더합니다'}">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Style="{StaticResource ButtonIcon}" Data="{StaticResource IconFolder}"
+                                      Width="12" Height="12" Margin="0,0,5,0" />
+                                <TextBlock Text="{loc:Tr '저장소 추가'}" FontSize="{StaticResource FontXs}"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                            </StackPanel>
+                        </Button>
                     </WrapPanel>
 
                     <ListBox x:Name="RepoList" Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
@@ -1317,6 +1328,14 @@
                                         <TextBlock Text="{Binding Conflicts.Count}" Style="{StaticResource ChipText}"
                                                    Foreground="{DynamicResource PanelBrush}" />
                                     </Border>
+                                    <!-- 계약: 받기 미리 보기의 충돌 예상 수 — 실제 충돌이 있으면 미리 보기를 비우므로 둘이 함께 뜨지 않는다 -->
+                                    <Border Style="{StaticResource Chip}" Margin="7,0,0,0" Padding="6,1"
+                                            Background="{DynamicResource WarnBrush}"
+                                            ToolTip="{loc:Tr '받으면 충돌할 파일 수(미리 보기)'}"
+                                            Visibility="{Binding IncomingConflictCount, Converter={StaticResource CountToVisibility}}">
+                                        <TextBlock Text="{Binding IncomingConflictCount}" Style="{StaticResource ChipText}"
+                                                   Foreground="{DynamicResource PanelBrush}" />
+                                    </Border>
                                 </StackPanel>
                             </TabItem.Header>
                             <Grid>
@@ -1339,142 +1358,285 @@
                                             Visibility="{Binding Conflicts.Count, Converter={StaticResource CountToVisibility}}">
                                         <TextBlock Text="{loc:Tr '고른 것 모두 적용'}" FontSize="{StaticResource FontXs}" />
                                     </Button>
-                                    <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" TextWrapping="Wrap"
-                                               Text="{loc:Tr '자동으로 풀 수 있는 구간은 미리 골라 두었습니다. 나머지를 고른 뒤 적용해 주십시오.'}"
-                                               Visibility="{Binding Conflicts.Count, Converter={StaticResource CountToVisibility}}" />
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource MergeButton}" Margin="8,0,0,0"
+                                            Command="{Binding ApplyIncomingCommand}"
+                                            ToolTip="{loc:Tr '겹치는 변경이 있으면 띠의 커밋 제목으로 먼저 커밋하고, 원격의 같은 브랜치를 지금 브랜치로 Merge 합니다 — 충돌하면 이 탭에서 구간을 고릅니다'}"
+                                            Visibility="{Binding CanApplyIncoming, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="{Binding IncomingActionText}" FontSize="{StaticResource FontXs}" />
+                                    </Button>
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                            Command="{Binding RefreshIncomingCommand}"
+                                            ToolTip="{loc:Tr '지금 작업 트리로 다시 합쳐 봅니다 — 원격에는 닿지 않습니다'}"
+                                            Visibility="{Binding HasIncoming, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="{loc:Tr '다시 보기'}" FontSize="{StaticResource FontXs}"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                                    </Button>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                                                   Text="{loc:Tr '자동으로 풀 수 있는 구간은 미리 골라 두었습니다. 나머지를 고른 뒤 적용해 주십시오.'}"
+                                                   Visibility="{Binding Conflicts.Count, Converter={StaticResource CountToVisibility}}" />
+                                        <TextBlock Text="{loc:Tr '받기 미리 보기'}" FontWeight="SemiBold"
+                                                   Visibility="{Binding HasIncoming, Converter={StaticResource BoolToVisibility}}" />
+                                        <TextBlock Text="{Binding IncomingSummary}" Style="{StaticResource Micro}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                                   Visibility="{Binding HasIncoming, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
                                 </DockPanel>
 
-                                <TextBlock Grid.Row="1" Text="{loc:Tr '충돌이 없습니다.'}" Style="{StaticResource Caption}" Margin="4,14,0,0"
-                                           Visibility="{Binding Conflicts.Count, Converter={StaticResource CountToVisibility}, ConverterParameter=invert}" />
-                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
-                                    <StackPanel>
-                                    <!-- 계약: 차이 요약은 세 층이다 — 저장소(여기) · 파일 · 구간. 값은 MainViewModel.Conflicts.cs 가 센다 -->
-                                    <Border Style="{StaticResource Chip}" Padding="10,5" Margin="0,0,4,8" HorizontalAlignment="Left"
-                                            Visibility="{Binding Conflicts.Count, Converter={StaticResource CountToVisibility}}">
-                                        <TextBlock Text="{Binding ConflictOverview}" FontSize="{StaticResource FontXs}"
-                                                   Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" />
-                                    </Border>
-                                    <ItemsControl ItemsSource="{Binding Conflicts}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border Style="{StaticResource Card}" Margin="0,0,4,8" Padding="12">
-                                                    <StackPanel>
-                                                        <DockPanel LastChildFill="True">
-                                                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
-                                                                    IsEnabled="{Binding IsReady}"
-                                                                    Command="{Binding DataContext.ApplyConflictFileCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                    CommandParameter="{Binding}"
-                                                                    ToolTip="{loc:Tr '이 파일을 고른 대로 다시 쓰고 스테이지합니다'}">
-                                                                <TextBlock Text="{loc:Tr '이 파일 적용'}" FontSize="{StaticResource FontXs}"
-                                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
-                                                            </Button>
-                                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Summary}" Style="{StaticResource Micro}"
-                                                                       VerticalAlignment="Center" Margin="8,0,0,0" />
-                                                            <TextBlock Text="{Binding Path}" Style="{StaticResource Mono}"
-                                                                       FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="1" Text="{loc:Tr '충돌이 없습니다.'}" Margin="4,14,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ShowConflictPane}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <!-- 계약: 두 단이다 — 왼쪽은 충돌 항목(실제 충돌 · 없으면 받기 미리 보기), 오른쪽은 고른 항목 하나. 값은 MainViewModel.Conflicts.cs -->
+                                <Grid x:Name="IncomingPanel" Grid.Row="1" Margin="0,8,0,0"
+                                      Visibility="{Binding ShowConflictPane, Converter={StaticResource BoolToVisibility}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="3*" MinWidth="220" MaxWidth="420" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="7*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Style="{StaticResource Card}" Padding="8">
+                                        <DockPanel LastChildFill="True">
+                                            <TextBlock DockPanel.Dock="Top" Text="{Binding ConflictItemsTitle}" Style="{StaticResource Micro}"
+                                                       FontWeight="SemiBold" TextWrapping="Wrap" Margin="4,0,4,6"
+                                                       Visibility="{Binding HasConflictItems, Converter={StaticResource BoolToVisibility}}" />
+                                            <!-- 계약: 충돌이 아닌 겹침은 고를 것이 없어 이름만 보인다 -->
+                                            <StackPanel DockPanel.Dock="Bottom" Margin="4,8,4,0"
+                                                        Visibility="{Binding HasIncoming, Converter={StaticResource BoolToVisibility}}">
+                                                <ItemsControl ItemsSource="{Binding IncomingOthers}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <DockPanel Margin="0,0,0,4" ToolTip="{Binding Note}">
+                                                                <Border DockPanel.Dock="Left" Padding="6,0" Margin="0,0,6,0" VerticalAlignment="Top">
+                                                                    <Border.Style>
+                                                                        <Style TargetType="Border" BasedOn="{StaticResource Chip}">
+                                                                            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding Kind}" Value="Untracked">
+                                                                                    <Setter Property="Background" Value="{DynamicResource WarnBrush}" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Border.Style>
+                                                                    <TextBlock Text="{Binding KindText}" Style="{StaticResource ChipText}"
+                                                                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                                                                </Border>
+                                                                <TextBlock Text="{Binding Path}" Style="{StaticResource Micro}" TextWrapping="Wrap" />
+                                                            </DockPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                            <ListBox ItemsSource="{Binding ConflictItems}" SelectedItem="{Binding SelectedConflict, Mode=TwoWay}"
+                                                     Background="Transparent" BorderThickness="0"
+                                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                     ItemContainerStyle="{Binding Settings.CompactRows, Converter={StaticResource RowStyle}}">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <DockPanel Margin="2,3" LastChildFill="True">
+                                                            <Border DockPanel.Dock="Left" Width="18" Height="18" CornerRadius="9" Margin="0,1,8,0"
+                                                                    VerticalAlignment="Top">
+                                                                <Border.Style>
+                                                                    <Style TargetType="Border">
+                                                                        <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsReady}" Value="True">
+                                                                                <Setter Property="Background" Value="{DynamicResource OkBrush}" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
+                                                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="{StaticResource FontXs}"
+                                                                           Foreground="{DynamicResource PanelBrush}" FontWeight="Bold">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock">
+                                                                            <Setter Property="Text" Value="!" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsReady}" Value="True">
+                                                                                    <Setter Property="Text" Value="✓" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </Border>
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                                                           ToolTip="{Binding Path}" />
+                                                                <TextBlock Text="{Binding Folder}" Style="{StaticResource Micro}" TextTrimming="CharacterEllipsis"
+                                                                           ToolTip="{Binding Path}" />
+                                                                <TextBlock Text="{Binding Summary}" Style="{StaticResource Micro}" TextWrapping="Wrap" Margin="0,1,0,0" />
+                                                            </StackPanel>
                                                         </DockPanel>
-                                                        <TextBlock Text="{Binding DiffSummary}" Style="{StaticResource Micro}" Margin="0,3,0,0"
-                                                                   TextWrapping="Wrap"
-                                                                   Visibility="{Binding DiffSummary, Converter={StaticResource EmptyToVisibility}}" />
-                                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}" Margin="0,4,0,0"
-                                                                   TextWrapping="Wrap"
-                                                                   Visibility="{Binding Note, Converter={StaticResource EmptyToVisibility}}" />
-                                                        <ItemsControl ItemsSource="{Binding Hunks}" Margin="0,8,0,0">
-                                                            <ItemsControl.ItemTemplate>
-                                                                <DataTemplate>
-                                                                    <StackPanel Margin="0,0,0,12">
-                                                                        <WrapPanel>
-                                                                            <TextBlock Style="{StaticResource Micro}" VerticalAlignment="Center" Margin="0,0,8,0">
-                                                                                <Run Text="{Binding StartLine, Mode=OneWay}" /><Run Text="줄" />
-                                                                            </TextBlock>
-                                                                            <Border Style="{StaticResource Chip}" Padding="7,1" Margin="0,0,8,0"
-                                                                                    Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Center"
-                                                                                    Visibility="{Binding IsCertain, Converter={StaticResource BoolToVisibility}}">
-                                                                                <TextBlock Text="{loc:Tr '자동'}" Style="{StaticResource ChipText}"
-                                                                                           Foreground="{DynamicResource TextPrimaryBrush}" />
-                                                                            </Border>
-                                                                            <TextBlock Text="{Binding Reason}" Style="{StaticResource Micro}" VerticalAlignment="Center" />
-                                                                        </WrapPanel>
-                                                                        <WrapPanel Margin="0,5,0,0">
-                                                                            <ToggleButton Style="{StaticResource PillToggle}" Padding="9,3" Margin="0,0,5,0"
-                                                                                          Content="{loc:Tr '내 것'}" IsChecked="{Binding IsOurs, Mode=TwoWay}" />
-                                                                            <ToggleButton Style="{StaticResource PillToggle}" Padding="9,3" Margin="0,0,5,0"
-                                                                                          Content="{loc:Tr '상대 것'}" IsChecked="{Binding IsTheirs, Mode=TwoWay}" />
-                                                                            <ToggleButton Style="{StaticResource PillToggle}" Padding="9,3" Margin="0,0,5,0"
-                                                                                          Content="{loc:Tr '둘 다'}" IsChecked="{Binding IsBoth, Mode=TwoWay}"
-                                                                                          ToolTip="{loc:Tr '내 것 다음에 상대 것을 이어 붙입니다'}" />
-                                                                            <ToggleButton Style="{StaticResource PillToggle}" Padding="9,3"
-                                                                                          Content="{loc:Tr '합치기'}" IsChecked="{Binding IsMerged, Mode=TwoWay}"
-                                                                                          ToolTip="{loc:Tr '양쪽이 서로 다른 줄을 고쳐 줄 단위로 합친 결과입니다'}"
-                                                                                          Visibility="{Binding CanMerge, Converter={StaticResource BoolToVisibility}}" />
-                                                                        </WrapPanel>
-                                                                        <TextBlock Text="{Binding DiffSummary}" Style="{StaticResource Micro}" Margin="0,5,0,0"
-                                                                                   TextWrapping="Wrap" />
-                                                                        <!-- 계약: 구간마다 코드는 셋을 보인다 — 갈라지기 전(공통 조상) · 내 것 · 상대 것. 조상은 있을 때만 -->
-                                                                        <Border BorderThickness="3,0,0,0" Padding="9,5" Margin="0,6,0,0"
-                                                                                CornerRadius="0,6,6,0"
-                                                                                BorderBrush="{DynamicResource DividerBrush}"
-                                                                                Background="{DynamicResource SubtleOverlayBrush}"
-                                                                                Visibility="{Binding HasBase, Converter={StaticResource BoolToVisibility}}">
-                                                                            <StackPanel>
-                                                                                <TextBlock Text="{loc:Tr '갈라지기 전 (공통 조상)'}" Style="{StaticResource Micro}"
-                                                                                           FontWeight="SemiBold" />
-                                                                                <TextBlock Text="{Binding Base, Converter={StaticResource Lines}}"
-                                                                                           Style="{StaticResource Mono}" TextWrapping="Wrap"
-                                                                                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0" />
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                        </DockPanel>
+                                    </Border>
+
+                                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                                        <StackPanel>
+                                            <!-- 받기 미리 보기의 처리 순서 — 값은 MainViewModel.Incoming.cs 가 만든다 -->
+                                            <Border Style="{StaticResource Card}" Margin="0,0,4,8" Padding="12"
+                                                    Visibility="{Binding IncomingGuide.Count, Converter={StaticResource CountToVisibility}}">
+                                                <StackPanel>
+                                                    <TextBlock Text="{loc:Tr '처리 순서'}" Style="{StaticResource Micro}" FontWeight="SemiBold" Margin="0,0,0,2" />
+                                                    <ItemsControl ItemsSource="{Binding IncomingGuide}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Text="{Binding}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,1,0,1" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+                                            <!-- 계약: 차이 요약은 세 층이다 — 저장소(여기) · 파일 · 구간. 값은 MainViewModel.Conflicts.cs 가 센다 -->
+                                            <Border Style="{StaticResource Chip}" Padding="10,5" Margin="0,0,4,8" HorizontalAlignment="Left"
+                                                    Visibility="{Binding Conflicts.Count, Converter={StaticResource CountToVisibility}}">
+                                                <TextBlock Text="{Binding ConflictOverview}" FontSize="{StaticResource FontXs}"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                                            </Border>
+                                            <ContentControl Content="{Binding SelectedConflict}">
+                                                <ContentControl.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <Border Style="{StaticResource Card}" Margin="0,0,4,8" Padding="12">
+                                                            <StackPanel>
+                                                                <DockPanel LastChildFill="True">
+                                                                    <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                                                            Command="{Binding DataContext.NextConflictCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                            ToolTip="{loc:Tr '다 고르지 않은 다음 항목을 엽니다'}">
+                                                                        <TextBlock Text="{loc:Tr '다음 항목'}" FontSize="{StaticResource FontXs}"
+                                                                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                                    </Button>
+                                                                    <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                                                            IsEnabled="{Binding IsReady}"
+                                                                            Visibility="{Binding IsReal, Converter={StaticResource BoolToVisibility}}"
+                                                                            Command="{Binding DataContext.ApplyConflictFileCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                            CommandParameter="{Binding}"
+                                                                            ToolTip="{loc:Tr '이 파일을 고른 대로 다시 쓰고 스테이지합니다'}">
+                                                                        <TextBlock Text="{loc:Tr '이 파일 적용'}" FontSize="{StaticResource FontXs}"
+                                                                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                                    </Button>
+                                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Summary}" Style="{StaticResource Micro}"
+                                                                               VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                                    <TextBlock Text="{Binding Path}" Style="{StaticResource Mono}"
+                                                                               FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                                                </DockPanel>
+                                                                <TextBlock Text="{loc:Tr '미리 보기 — 아직 받지 않았습니다. 여기서 고른 것은 받은 뒤 같은 구간에 그대로 이어집니다.'}"
+                                                                           Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                                                           Visibility="{Binding IsPreview, Converter={StaticResource BoolToVisibility}}" />
+                                                                <TextBlock Text="{Binding DiffSummary}" Style="{StaticResource Micro}" Margin="0,3,0,0"
+                                                                           TextWrapping="Wrap"
+                                                                           Visibility="{Binding DiffSummary, Converter={StaticResource EmptyToVisibility}}" />
+                                                                <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}" Margin="0,4,0,0"
+                                                                           TextWrapping="Wrap"
+                                                                           Visibility="{Binding Note, Converter={StaticResource EmptyToVisibility}}" />
+                                                                <ItemsControl ItemsSource="{Binding Hunks}" Margin="0,8,0,0">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <StackPanel Margin="0,0,0,12">
+                                                                                <WrapPanel>
+                                                                                    <TextBlock Style="{StaticResource Micro}" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                                                        <Run Text="{Binding StartLine, Mode=OneWay}" /><Run Text="줄" />
+                                                                                    </TextBlock>
+                                                                                    <Border Style="{StaticResource Chip}" Padding="7,1" Margin="0,0,8,0"
+                                                                                            Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Center"
+                                                                                            Visibility="{Binding IsCertain, Converter={StaticResource BoolToVisibility}}">
+                                                                                        <TextBlock Text="{loc:Tr '자동'}" Style="{StaticResource ChipText}"
+                                                                                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                                                                                    </Border>
+                                                                                    <TextBlock Text="{Binding Reason}" Style="{StaticResource Micro}" VerticalAlignment="Center" />
+                                                                                </WrapPanel>
+                                                                                <WrapPanel Margin="0,5,0,0">
+                                                                                    <ToggleButton Style="{StaticResource PillToggle}" Padding="9,3" Margin="0,0,5,0"
+                                                                                                  Content="{loc:Tr '내 것'}" IsChecked="{Binding IsOurs, Mode=TwoWay}" />
+                                                                                    <ToggleButton Style="{StaticResource PillToggle}" Padding="9,3" Margin="0,0,5,0"
+                                                                                                  Content="{loc:Tr '상대 것'}" IsChecked="{Binding IsTheirs, Mode=TwoWay}" />
+                                                                                    <ToggleButton Style="{StaticResource PillToggle}" Padding="9,3" Margin="0,0,5,0"
+                                                                                                  Content="{loc:Tr '둘 다'}" IsChecked="{Binding IsBoth, Mode=TwoWay}"
+                                                                                                  ToolTip="{loc:Tr '내 것 다음에 상대 것을 이어 붙입니다'}" />
+                                                                                    <ToggleButton Style="{StaticResource PillToggle}" Padding="9,3"
+                                                                                                  Content="{loc:Tr '합치기'}" IsChecked="{Binding IsMerged, Mode=TwoWay}"
+                                                                                                  ToolTip="{loc:Tr '양쪽이 서로 다른 줄을 고쳐 줄 단위로 합친 결과입니다'}"
+                                                                                                  Visibility="{Binding CanMerge, Converter={StaticResource BoolToVisibility}}" />
+                                                                                </WrapPanel>
+                                                                                <TextBlock Text="{Binding DiffSummary}" Style="{StaticResource Micro}" Margin="0,5,0,0"
+                                                                                           TextWrapping="Wrap" />
+                                                                                <!-- 계약: 구간마다 코드는 셋을 보인다 — 갈라지기 전(공통 조상) · 내 것 · 상대 것. 조상은 있을 때만 -->
+                                                                                <Border BorderThickness="3,0,0,0" Padding="9,5" Margin="0,6,0,0"
+                                                                                        CornerRadius="0,6,6,0"
+                                                                                        BorderBrush="{DynamicResource DividerBrush}"
+                                                                                        Background="{DynamicResource SubtleOverlayBrush}"
+                                                                                        Visibility="{Binding HasBase, Converter={StaticResource BoolToVisibility}}">
+                                                                                    <StackPanel>
+                                                                                        <TextBlock Text="{loc:Tr '갈라지기 전 (공통 조상)'}" Style="{StaticResource Micro}"
+                                                                                                   FontWeight="SemiBold" />
+                                                                                        <TextBlock Text="{Binding Base, Converter={StaticResource Lines}}"
+                                                                                                   Style="{StaticResource Mono}" TextWrapping="Wrap"
+                                                                                                   Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0" />
+                                                                                    </StackPanel>
+                                                                                </Border>
+                                                                                <Border BorderThickness="3,0,0,0" Padding="9,5" Margin="0,3,0,0"
+                                                                                        CornerRadius="0,6,6,0"
+                                                                                        BorderBrush="{DynamicResource AheadBrush}"
+                                                                                        Background="{DynamicResource SubtleOverlayBrush}">
+                                                                                    <StackPanel>
+                                                                                        <TextBlock Text="{loc:Tr '내 것 (지금 브랜치)'}" Style="{StaticResource Micro}"
+                                                                                                   FontWeight="SemiBold"
+                                                                                                   Foreground="{DynamicResource AheadBrush}" />
+                                                                                        <TextBlock Text="{Binding Ours, Converter={StaticResource Lines}}"
+                                                                                                   Style="{StaticResource Mono}" TextWrapping="Wrap"
+                                                                                                   Margin="0,2,0,0" />
+                                                                                    </StackPanel>
+                                                                                </Border>
+                                                                                <Border BorderThickness="3,0,0,0" Padding="9,5" Margin="0,3,0,0"
+                                                                                        CornerRadius="0,6,6,0"
+                                                                                        BorderBrush="{DynamicResource BehindBrush}"
+                                                                                        Background="{DynamicResource SubtleOverlayBrush}">
+                                                                                    <StackPanel>
+                                                                                        <TextBlock Text="{loc:Tr '상대 것 (들어오는 쪽)'}" Style="{StaticResource Micro}"
+                                                                                                   FontWeight="SemiBold"
+                                                                                                   Foreground="{DynamicResource BehindBrush}" />
+                                                                                        <TextBlock Text="{Binding Theirs, Converter={StaticResource Lines}}"
+                                                                                                   Style="{StaticResource Mono}" TextWrapping="Wrap"
+                                                                                                   Margin="0,2,0,0" />
+                                                                                    </StackPanel>
+                                                                                </Border>
+                                                                                <Border BorderThickness="3,0,0,0" Padding="9,5" Margin="0,3,0,0"
+                                                                                        CornerRadius="0,6,6,0"
+                                                                                        BorderBrush="{DynamicResource OkBrush}"
+                                                                                        Background="{DynamicResource SubtleOverlayBrush}"
+                                                                                        Visibility="{Binding CanMerge, Converter={StaticResource BoolToVisibility}}">
+                                                                                    <StackPanel>
+                                                                                        <TextBlock Text="{loc:Tr '합친 결과'}" Style="{StaticResource Micro}"
+                                                                                                   FontWeight="SemiBold"
+                                                                                                   Foreground="{DynamicResource OkBrush}" />
+                                                                                        <TextBlock Text="{Binding MergedLines, Converter={StaticResource Lines}}"
+                                                                                                   Style="{StaticResource Mono}" TextWrapping="Wrap"
+                                                                                                   Margin="0,2,0,0" />
+                                                                                    </StackPanel>
+                                                                                </Border>
                                                                             </StackPanel>
-                                                                        </Border>
-                                                                        <Border BorderThickness="3,0,0,0" Padding="9,5" Margin="0,3,0,0"
-                                                                                CornerRadius="0,6,6,0"
-                                                                                BorderBrush="{DynamicResource AheadBrush}"
-                                                                                Background="{DynamicResource SubtleOverlayBrush}">
-                                                                            <StackPanel>
-                                                                                <TextBlock Text="{loc:Tr '내 것 (지금 브랜치)'}" Style="{StaticResource Micro}"
-                                                                                           FontWeight="SemiBold"
-                                                                                           Foreground="{DynamicResource AheadBrush}" />
-                                                                                <TextBlock Text="{Binding Ours, Converter={StaticResource Lines}}"
-                                                                                           Style="{StaticResource Mono}" TextWrapping="Wrap"
-                                                                                           Margin="0,2,0,0" />
-                                                                            </StackPanel>
-                                                                        </Border>
-                                                                        <Border BorderThickness="3,0,0,0" Padding="9,5" Margin="0,3,0,0"
-                                                                                CornerRadius="0,6,6,0"
-                                                                                BorderBrush="{DynamicResource BehindBrush}"
-                                                                                Background="{DynamicResource SubtleOverlayBrush}">
-                                                                            <StackPanel>
-                                                                                <TextBlock Text="{loc:Tr '상대 것 (들어오는 쪽)'}" Style="{StaticResource Micro}"
-                                                                                           FontWeight="SemiBold"
-                                                                                           Foreground="{DynamicResource BehindBrush}" />
-                                                                                <TextBlock Text="{Binding Theirs, Converter={StaticResource Lines}}"
-                                                                                           Style="{StaticResource Mono}" TextWrapping="Wrap"
-                                                                                           Margin="0,2,0,0" />
-                                                                            </StackPanel>
-                                                                        </Border>
-                                                                        <Border BorderThickness="3,0,0,0" Padding="9,5" Margin="0,3,0,0"
-                                                                                CornerRadius="0,6,6,0"
-                                                                                BorderBrush="{DynamicResource OkBrush}"
-                                                                                Background="{DynamicResource SubtleOverlayBrush}"
-                                                                                Visibility="{Binding CanMerge, Converter={StaticResource BoolToVisibility}}">
-                                                                            <StackPanel>
-                                                                                <TextBlock Text="{loc:Tr '합친 결과'}" Style="{StaticResource Micro}"
-                                                                                           FontWeight="SemiBold"
-                                                                                           Foreground="{DynamicResource OkBrush}" />
-                                                                                <TextBlock Text="{Binding MergedLines, Converter={StaticResource Lines}}"
-                                                                                           Style="{StaticResource Mono}" TextWrapping="Wrap"
-                                                                                           Margin="0,2,0,0" />
-                                                                            </StackPanel>
-                                                                        </Border>
-                                                                    </StackPanel>
-                                                                </DataTemplate>
-                                                            </ItemsControl.ItemTemplate>
-                                                        </ItemsControl>
-                                                    </StackPanel>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    </StackPanel>
-                                </ScrollViewer>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ContentControl.ContentTemplate>
+                                            </ContentControl>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Grid>
                             </Grid>
                         </TabItem>
 
@@ -2364,6 +2526,8 @@
         <views:OffBranchLayer Grid.RowSpan="4" />
         <!-- 계약: 원격 없는 저장소를 GitHub 에 올리는 층 — 값은 MainViewModel.Publish.cs -->
         <views:PublishLayer Grid.RowSpan="4" />
+        <!-- 계약: 폴더를 훑어 저장소를 더하는 층 — 값은 MainViewModel.AddRepo.cs -->
+        <views:AddRepoLayer Grid.RowSpan="4" />
 
         <!-- ⑤ 도움말 안내 층 — 평소에는 접혀 있고 「도움말」이 펴서 화면 요소를 차례로 비춘다(MainWindow.Tour.cs) -->
         <controls:TourOverlay x:Name="Tour" Grid.RowSpan="4" Visibility="Collapsed" />

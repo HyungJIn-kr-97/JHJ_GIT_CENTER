@@ -65,6 +65,10 @@ public interface IGitService
 
     Task<IReadOnlyList<ConflictFile>> ReadConflictsAsync(RepoEntry repo, CancellationToken cancellationToken);
 
+    /// 계약: 지금 브랜치에 reference(비면 upstream · 없으면 원격의 같은 이름)를 합쳐 보면 무엇이 충돌하나 — 작업 트리·브랜치·stash 목록을 바꾸지 않는다
+    /// 계약: 받을 것이 없거나 병합 중이면 null 이다
+    Task<IncomingPreview?> PreviewIncomingAsync(RepoEntry repo, string? reference, string remoteName, CancellationToken cancellationToken);
+
     /// 계약: 한 파일의 변경 내용 — 읽기뿐이라 작업 트리를 건드리지 않는다
     Task<FileDiff> ReadDiffAsync(RepoEntry repo, FileChange change, CancellationToken cancellationToken);
 

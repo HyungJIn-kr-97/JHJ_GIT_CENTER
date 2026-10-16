@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GitCenter.Application.Services;
@@ -94,9 +95,10 @@ public sealed partial class ConflictHunkVm : ObservableObject
 /// <summary>충돌 파일 하나 — 구간들과 「다 골랐나」.</summary>
 public sealed class ConflictFileVm : ObservableObject
 {
-    public ConflictFileVm(ConflictFile file)
+    public ConflictFileVm(ConflictFile file, bool isPreview = false)
     {
         File = file;
+        IsPreview = isPreview;
         Hunks = [.. file.Hunks.Select(h => new ConflictHunkVm(h, file.HasBase))];
         foreach (var hunk in Hunks)
         {
@@ -104,13 +106,25 @@ public sealed class ConflictFileVm : ObservableObject
             {
                 OnPropertyChanged(nameof(IsReady));
                 OnPropertyChanged(nameof(Summary));
+                ChoiceChanged?.Invoke(this);
             };
         }
     }
 
     public ConflictFile File { get; }
 
+    /// 계약: 받기 미리 보기의 항목이다 — 고른 것은 기억만 하고, 실제로 받아 충돌이 나면 같은 구간에 이어 붙인다(파일은 안 바뀐다)
+    public bool IsPreview { get; }
+
+    public bool IsReal => !IsPreview;
+
+    public Action<ConflictFileVm>? ChoiceChanged { get; set; }
+
     public string Path => File.Path;
+
+    public string FileName => System.IO.Path.GetFileName(File.Path);
+
+    public string Folder => System.IO.Path.GetDirectoryName(File.Path)?.Replace('\\', '/') ?? string.Empty;
 
     public string? Note => File.Note;
 
@@ -127,12 +141,108 @@ public sealed class ConflictFileVm : ObservableObject
             Hunks.Count, Hunks.Sum(h => h.Ours.Count), Hunks.Sum(h => h.Theirs.Count), Hunks.Count(h => !h.IsCertain));
 
     public string Summary => !CanResolve
-        ? "앱에서 풀 수 없음"
-        : $"{Hunks.Count(h => h.Choice != ConflictChoice.None)} / {Hunks.Count} 구간 선택 · 자동 {Hunks.Count(h => h.IsCertain)}";
+        ? Loc.T("앱에서 풀 수 없음")
+        : Loc.T("{0} / {1} 구간 선택 · 자동 {2}", Hunks.Count(h => h.Choice != ConflictChoice.None), Hunks.Count, Hunks.Count(h => h.IsCertain));
 }
 
 public sealed partial class MainViewModel
 {
+    // 계약: 충돌 탭은 왼쪽 항목 목록 + 오른쪽 고른 항목 하나다 — 실제 충돌이 있으면 그것을, 없으면 받기 미리 보기의 충돌을 싣는다
+    public ObservableCollection<ConflictFileVm> ConflictItems { get; } = [];
+
+    [ObservableProperty]
+    private ConflictFileVm? _selectedConflict;
+
+    public bool HasConflictItems => ConflictItems.Count > 0;
+
+    /// 계약: 두 단은 고를 항목이 있거나 받기 미리 보기가 있을 때 보인다 — 둘 다 없으면 「충돌이 없습니다」 한 줄이다
+    public bool ShowConflictPane => HasConflictItems || HasIncoming;
+
+    public string ConflictItemsTitle => Conflicts.Count > 0
+        ? Loc.T("충돌 파일 {0} · 남은 것 {1}", ConflictItems.Count, ConflictItems.Count(f => !f.IsReady))
+        : Loc.T("받으면 충돌할 파일 {0} · 미리 고른 것 {1}", ConflictItems.Count, ConflictItems.Count(f => f.IsReady));
+
+    // 계약: 고른 구간은 저장소별로 기억한다 — 미리 보기에서 고른 것이 실제 충돌로, 다시 읽은 충돌 목록으로 이어진다
+    // 함정: 같은 구간인지는 위치가 아니라 양쪽 내용으로 가린다 — 커밋 뒤 줄 번호가 달라질 수 있다
+    private readonly Dictionary<string, List<(IReadOnlyList<string> Ours, IReadOnlyList<string> Theirs, ConflictChoice Choice)>> _pickedHunks =
+        new(StringComparer.Ordinal);
+
+    private string _pickedRepoId = string.Empty;
+
+    private void RebuildConflictItems()
+    {
+        var keep = SelectedConflict?.Path;
+        ConflictItems.Clear();
+        var source = Conflicts.Count > 0
+            ? Conflicts.AsEnumerable()
+            : IncomingFiles.Select(f => f.Resolver).OfType<ConflictFileVm>();
+
+        foreach (var item in source)
+        {
+            if (item.ChoiceChanged is null)
+            {
+                RestorePicks(item);
+                item.ChoiceChanged = RememberPicks;
+            }
+
+            ConflictItems.Add(item);
+        }
+
+        SelectedConflict = ConflictItems.FirstOrDefault(f => f.Path == keep)
+            ?? ConflictItems.FirstOrDefault(f => !f.IsReady)
+            ?? ConflictItems.FirstOrDefault();
+        OnPropertyChanged(nameof(HasConflictItems));
+        OnPropertyChanged(nameof(ShowConflictPane));
+        OnPropertyChanged(nameof(ConflictItemsTitle));
+    }
+
+    private void ForgetPicksUnless(string repoId)
+    {
+        if (_pickedRepoId != repoId)
+        {
+            _pickedHunks.Clear();
+            _pickedRepoId = repoId;
+        }
+    }
+
+    private void RememberPicks(ConflictFileVm file)
+    {
+        _pickedHunks[file.Path] = [.. file.Hunks.Where(h => h.Choice != ConflictChoice.None).Select(h => (h.Ours, h.Theirs, h.Choice))];
+        OnPropertyChanged(nameof(ConflictItemsTitle));
+    }
+
+    private void RestorePicks(ConflictFileVm file)
+    {
+        if (!_pickedHunks.TryGetValue(file.Path, out var picks))
+        {
+            return;
+        }
+
+        foreach (var hunk in file.Hunks)
+        {
+            var hit = picks.FirstOrDefault(p => p.Ours.SequenceEqual(hunk.Ours) && p.Theirs.SequenceEqual(hunk.Theirs));
+            if (hit.Choice != ConflictChoice.None && (hit.Choice != ConflictChoice.Merged || hunk.CanMerge))
+            {
+                hunk.Choice = hit.Choice;
+            }
+        }
+    }
+
+    /// <summary>다음으로 고를 항목 — 다 고르지 않은 것 중 지금 것 다음, 없으면 처음부터.</summary>
+    [RelayCommand]
+    private void NextConflict()
+    {
+        if (ConflictItems.Count == 0)
+        {
+            return;
+        }
+
+        var at = SelectedConflict is null ? -1 : ConflictItems.IndexOf(SelectedConflict);
+        var order = ConflictItems.Skip(at + 1).Concat(ConflictItems.Take(at + 1));
+        SelectedConflict = order.FirstOrDefault(f => !f.IsReady && !ReferenceEquals(f, SelectedConflict))
+            ?? ConflictItems[(at + 1) % ConflictItems.Count];
+    }
+
     /// 계약: 병합 중인데 풀 충돌이 더 없다 — 「병합 마무리」 단추가 이때만 보인다
     public bool CanConcludeMerge => SelectedRow?.Status?.Operation == GitOperationState.Merging && Conflicts.Count == 0;
 

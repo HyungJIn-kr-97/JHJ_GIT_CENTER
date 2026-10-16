@@ -1283,12 +1283,11 @@ public sealed class GitService(IGitRunner runner) : IGitService
         }
 
         // 왜: git 은 겹치면 영어 원문으로 거부한다 — 병합을 걸기 전에 겹친 파일을 찾아 무엇을 먼저 할지 우리말로 알린다
-        var overlap = await OverlapWithIncomingAsync(repo, reference, ct).ConfigureAwait(false);
-        if (overlap.Count > 0)
+        var (tracked, untracked) = await OverlapWithIncomingAsync(repo, reference, ct).ConfigureAwait(false);
+        if (tracked.Count + untracked.Count > 0)
         {
-            step.Outcome = StepOutcome.Failed;
-            step.Message = OverlapMessage(overlap.Count, reference);
-            step.Detail = string.Join(Environment.NewLine, overlap);
+            var preview = await PreviewIncomingAsync(repo, reference, options.RemoteName, ct).ConfigureAwait(false);
+            DescribeOverlap(step, "병합하지",tracked.Count + untracked.Count, reference, preview);
             return;
         }
 
@@ -1351,6 +1350,19 @@ public sealed class GitService(IGitRunner runner) : IGitService
 
             // 계약: upstream 은 없지만 원격에 같은 이름이 있으면 그 브랜치를 받는다 — upstream 설정은 바꾸지 않는다
             args.AddRange([options.RemoteName, current]);
+        }
+
+        // 왜: 겹치면 git 이 영어 원문으로 거부한다 — 받기 전에 마지막 Fetch 기준으로 겹침과 충돌을 미리 보고 우리말로 알린다
+        if (!options.AutoStash)
+        {
+            var reference = upstream.Ok ? upstream.StdOut.Trim() : $"{options.RemoteName}/{current}";
+            var (tracked, untracked) = await OverlapWithIncomingAsync(repo, reference, ct).ConfigureAwait(false);
+            if (tracked.Count + untracked.Count > 0)
+            {
+                var preview = await PreviewIncomingAsync(repo, reference, options.RemoteName, ct).ConfigureAwait(false);
+                DescribeOverlap(step, "받지",tracked.Count + untracked.Count, reference, preview);
+                return;
+            }
         }
 
         var stashed = false;
@@ -2136,12 +2148,13 @@ public sealed class GitService(IGitRunner runner) : IGitService
 
     /// 계약: 커밋하지 않은 변경(추적 파일 + 추적 전 파일) 가운데 reference 에서 들어올 파일과 겹치는 것만 돌려준다 — 읽기만 한다
     // 함정: 이미 병합 중이면 묻지 않는다 — HEAD 와 견준 변경이 전부 병합분이라 통째로 겹친 것으로 보인다
-    private async Task<IReadOnlyList<string>> OverlapWithIncomingAsync(RepoEntry repo, string reference, CancellationToken ct)
+    private async Task<(IReadOnlyList<string> Tracked, IReadOnlyList<string> Untracked)> OverlapWithIncomingAsync(
+        RepoEntry repo, string reference, CancellationToken ct)
     {
         var gitDir = await ResolveGitDirAsync(repo, ct).ConfigureAwait(false);
         if (DetectOperation(gitDir) != GitOperationState.None)
         {
-            return [];
+            return ([], []);
         }
 
         // 계약: 세 점(HEAD...ref)은 갈라진 뒤 상대 쪽이 바꾼 파일이다 — 병합이 실제로 덮어쓸 파일과 같다
@@ -2149,13 +2162,13 @@ public sealed class GitService(IGitRunner runner) : IGitService
             ["-c", "core.quotepath=false", "diff", "--name-only", $"HEAD...{reference}"], ct, 60).ConfigureAwait(false);
         if (!incoming.Ok)
         {
-            return [];
+            return ([], []);
         }
 
         var theirs = Lines(incoming.StdOut).ToHashSet(StringComparer.Ordinal);
         if (theirs.Count == 0)
         {
-            return [];
+            return ([], []);
         }
 
         var tracked = await _runner.RunAsync(repo.Path,
@@ -2163,15 +2176,152 @@ public sealed class GitService(IGitRunner runner) : IGitService
         var untracked = await _runner.RunAsync(repo.Path,
             ["-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"], ct, 60).ConfigureAwait(false);
 
-        return Lines(tracked.StdOut).Concat(Lines(untracked.StdOut))
-            .Where(theirs.Contains).Distinct(StringComparer.Ordinal).ToList();
-
-        static IEnumerable<string> Lines(string text) =>
-            text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0);
+        return (Lines(tracked.StdOut).Where(theirs.Contains).Distinct(StringComparer.Ordinal).ToList(),
+            Lines(untracked.StdOut).Where(theirs.Contains).Distinct(StringComparer.Ordinal).ToList());
     }
 
-    private static string OverlapMessage(int count, string reference) =>
-        $"커밋하지 않은 변경 {count}개가 {reference} 에서 들어올 파일과 겹쳐 병합하지 않았습니다 — 먼저 커밋한 뒤 다시 Merge 해 주십시오.";
+    private static IEnumerable<string> Lines(string text) =>
+        text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0);
+
+    public async Task<IncomingPreview?> PreviewIncomingAsync(RepoEntry repo, string? reference, string remoteName, CancellationToken cancellationToken)
+    {
+        var ct = cancellationToken;
+        reference ??= await IncomingReferenceAsync(repo, remoteName, ct).ConfigureAwait(false);
+        if (reference is null)
+        {
+            return null;
+        }
+
+        var gitDir = await ResolveGitDirAsync(repo, ct).ConfigureAwait(false);
+        if (DetectOperation(gitDir) != GitOperationState.None)
+        {
+            return null;
+        }
+
+        var count = await _runner.RunAsync(repo.Path, ["rev-list", "--count", $"HEAD..{reference}"], ct, 30).ConfigureAwait(false);
+        if (!count.Ok || !int.TryParse(count.StdOut.Trim(), out var behind) || behind == 0)
+        {
+            return null;
+        }
+
+        var (tracked, untracked) = await OverlapWithIncomingAsync(repo, reference, ct).ConfigureAwait(false);
+
+        // 왜: stash create 는 작업 트리를 커밋 객체로만 만들고 stash 목록·파일은 그대로 둔다 — 커밋하지 않은 변경까지 넣어 합쳐 볼 수 있다
+        // 함정: 추적 전 파일은 그 객체에 안 들어간다 — 같은 이름이 들어오면 Untracked 로 따로 센다
+        var snapshot = await _runner.RunAsync(repo.Path, ["stash", "create"], ct, 60).ConfigureAwait(false);
+        var ours = snapshot.Ok && snapshot.StdOut.Trim().Length > 0 ? snapshot.StdOut.Trim() : "HEAD";
+
+        // 계약: merge-tree --write-tree 는 저장소의 브랜치·인덱스·작업 트리를 바꾸지 않는다(git 2.38+) — 종료 코드 0 은 깨끗, 1 은 충돌이다
+        var merge = await _runner.RunAsync(repo.Path,
+            ["-c", "merge.conflictStyle=diff3", "merge-tree", "--write-tree", "--name-only", ours, reference], ct, 120).ConfigureAwait(false);
+        if (merge.ExitCode is not (0 or 1))
+        {
+            return new IncomingPreview
+            {
+                Reference = reference,
+                Behind = behind,
+                Error = merge.Text.Contains("write-tree", StringComparison.OrdinalIgnoreCase) || merge.Text.Contains("usage:", StringComparison.OrdinalIgnoreCase)
+                    ? "git 2.38 이상에서만 미리 볼 수 있습니다 — git 을 새로 깔아 주십시오."
+                    : FirstLine(merge.Text)
+            };
+        }
+
+        // 계약: 출력은 「트리 id / 충돌 파일 이름들 / 빈 줄 / 알림 문장들」 차례다
+        var lines = merge.StdOut.Replace("\r", string.Empty).Split('\n');
+        var tree = lines[0].Trim();
+        var conflicted = new List<string>();
+        var at = 1;
+        for (; at < lines.Length && lines[at].Length > 0; at++)
+        {
+            conflicted.Add(lines[at]);
+        }
+
+        var notes = lines.Skip(at).Where(l => l.StartsWith("CONFLICT (", StringComparison.Ordinal)).ToList();
+        var mine = tracked.ToHashSet(StringComparer.Ordinal);
+        var files = new List<IncomingPreviewFile>();
+
+        foreach (var path in conflicted.Distinct(StringComparer.Ordinal))
+        {
+            var note = notes.FirstOrDefault(n => n.Contains(path, StringComparison.Ordinal)) ?? string.Empty;
+            var reason = note.Length > 0 ? note["CONFLICT (".Length..note.IndexOf(')')] : string.Empty;
+            var blob = await _runner.RunAsync(repo.Path, ["cat-file", "-p", $"{tree}:{path}"], ct, 60).ConfigureAwait(false);
+            var content = blob.Ok ? ConflictParser.Parse(path, blob.StdOut) : new ConflictFile { Path = path, Note = "미리 합친 결과에 이 파일이 없습니다 — 한쪽이 지운 파일입니다." };
+            content.HasBase = content.Hunks.Any(h => h.Base.Count > 0);
+
+            files.Add(new IncomingPreviewFile
+            {
+                Path = path,
+                Kind = IncomingFileKind.Conflict,
+                IsUncommitted = mine.Contains(path),
+                Reason = reason,
+                Content = content
+            });
+        }
+
+        files.AddRange(tracked.Where(p => !conflicted.Contains(p, StringComparer.Ordinal))
+            .Select(p => new IncomingPreviewFile { Path = p, Kind = IncomingFileKind.AutoMerge, IsUncommitted = true }));
+        files.AddRange(untracked
+            .Select(p => new IncomingPreviewFile { Path = p, Kind = IncomingFileKind.Untracked, IsUncommitted = true }));
+
+        return new IncomingPreview { Reference = reference, Behind = behind, Files = files };
+    }
+
+    /// 계약: 받기가 가져올 쪽 — upstream, 없으면 원격의 같은 이름. 둘 다 없으면 null
+    private async Task<string?> IncomingReferenceAsync(RepoEntry repo, string remoteName, CancellationToken ct)
+    {
+        var upstream = await _runner.RunAsync(repo.Path,
+            ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], ct, 20).ConfigureAwait(false);
+        if (upstream.Ok && upstream.StdOut.Trim().Length > 0)
+        {
+            return upstream.StdOut.Trim();
+        }
+
+        var current = await CurrentBranchAsync(repo, ct).ConfigureAwait(false);
+        if (current.Length == 0)
+        {
+            return null;
+        }
+
+        var known = await _runner.RunAsync(repo.Path,
+            ["show-ref", "--verify", "--quiet", $"refs/remotes/{remoteName}/{current}"], ct, 20).ConfigureAwait(false);
+        return known.Ok ? $"{remoteName}/{current}" : null;
+    }
+
+    /// 계약: 겹쳐서 멈춘 받기·병합의 결과 문구 — 미리 보기가 있으면 충돌·자동 병합 수와 다음에 할 일을 함께 적는다
+    private static void DescribeOverlap(BulkStepResult step, string verb, int count, string reference, IncomingPreview? preview)
+    {
+        step.Outcome = StepOutcome.Failed;
+        if (preview is null || preview.Error is not null)
+        {
+            step.Message = $"커밋하지 않은 변경 {count}개가 {reference} 에서 들어올 파일과 겹쳐 {verb} 않았습니다 — 먼저 커밋한 뒤 다시 해 주십시오.";
+            return;
+        }
+
+        var parts = new List<string>();
+        if (preview.ConflictCount > 0)
+        {
+            parts.Add($"받으면 {preview.ConflictCount}개 파일이 충돌합니다");
+        }
+
+        if (preview.AutoMergeCount > 0)
+        {
+            parts.Add($"{preview.AutoMergeCount}개는 저절로 합쳐집니다");
+        }
+
+        if (preview.UntrackedCount > 0)
+        {
+            parts.Add($"추적 전 파일 {preview.UntrackedCount}개와 이름이 같습니다");
+        }
+
+        step.Message = $"커밋하지 않은 변경 {count}개가 {reference} 에서 들어올 파일과 겹쳐 {verb} 않았습니다 — {string.Join(" · ", parts)}. 「충돌」 탭의 받기 미리 보기에서 처리 순서를 확인해 주십시오.";
+        step.NextAction = BulkNextAction.Conflict;
+        step.Detail = string.Join(Environment.NewLine, preview.Files.Select(f => f.Kind switch
+        {
+            IncomingFileKind.Conflict => $"충돌      {f.Path}" + (f.Reason.Length > 0 ? $"  ({f.Reason})" : string.Empty),
+            IncomingFileKind.AutoMerge => $"자동 병합  {f.Path}",
+            _ => $"추적 전    {f.Path}"
+        }));
+    }
 
     // 계약: 사용자가 자주 만나는 git 원문 넷만 우리말로 바꾼다 — 원문은 Detail 이 갖는다
     private static string DescribeFailure(string text)

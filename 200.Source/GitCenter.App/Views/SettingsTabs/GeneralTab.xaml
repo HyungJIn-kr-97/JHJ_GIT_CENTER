@@ -11,7 +11,7 @@
             <Border Style="{StaticResource Card}" Margin="0,0,0,10">
                 <StackPanel>
                     <TextBlock Text="시작과 트레이" Style="{StaticResource SectionTitle}" />
-                    <CheckBox Content="로그인할 때 자동으로 실행합니다" IsChecked="{Binding StartAtLogin}" />
+                    <CheckBox Content="{loc:Tr '시스템 시작 시 자동 실행'}" IsChecked="{Binding StartAtLogin}" />
                     <CheckBox Content="작업 표시줄에 아이콘을 항상 표시합니다 — 숨겨진 아이콘 칸 밖에 둡니다"
                               Margin="0,9,0,0" IsChecked="{Binding Settings.PinTrayIcon}" />
                     <CheckBox Content="창을 닫으면 트레이로 보냅니다 — 끝내기는 트레이 메뉴에서 합니다"

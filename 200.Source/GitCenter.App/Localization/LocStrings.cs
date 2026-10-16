@@ -515,6 +515,7 @@ internal static class LocStrings
         ["gh 없음"] = "gh missing",
         ["gh 설치"] = "Install gh",
         ["gh 설치 + 로그인"] = "Install gh and sign in",
+        ["시스템 시작 시 자동 실행"] = "Start automatically when the system starts",
         ["gh CLI"] = "gh CLI",
         ["git 자격 증명"] = "git credential",
         ["gh CLI 가 설치돼 있지 않습니다 — 누르면 winget 으로 설치한 뒤 로그인 콘솔을 엽니다."] = "GitHub CLI (gh) is not installed — click to install it with winget, then the sign-in console opens.",

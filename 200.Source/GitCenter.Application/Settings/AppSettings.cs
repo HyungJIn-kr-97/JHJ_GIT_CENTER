@@ -203,7 +203,8 @@ public sealed class AppSettings
     /// 계약: 창을 열 때마다 저장소 상태를 다시 읽는다 — 로컬만 읽고 원격에 닿지 않는다
     public bool RefreshOnOpen { get; set; } = false;
 
-    public bool StartAtLogin { get; set; } = false;
+    // 계약: 기본은 켬 — 작업 관리자에서 끈 값(StartupApproved 0x03)은 StartupRegistry.Sync 가 이 값보다 먼저 본다
+    public bool StartAtLogin { get; set; } = true;
 
     public bool MinimizeToTray { get; set; } = true;
 

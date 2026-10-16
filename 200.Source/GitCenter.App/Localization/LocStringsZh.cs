@@ -509,6 +509,7 @@ internal static class LocStringsZh
         ["gh 없음"] = "无 gh",
         ["gh 설치"] = "安装 gh",
         ["gh 설치 + 로그인"] = "安装 gh 并登录",
+        ["시스템 시작 시 자동 실행"] = "系统启动时自动运行",
         ["gh CLI"] = "gh CLI",
         ["git 자격 증명"] = "git 凭据",
         ["gh CLI 가 설치돼 있지 않습니다 — 누르면 winget 으로 설치한 뒤 로그인 콘솔을 엽니다."] = "未安装 GitHub CLI (gh) — 点击后先用 winget 安装，再打开登录控制台。",
